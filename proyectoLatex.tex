@@ -1,0 +1,37 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+
+\title{Planificación automática aplicada al Senku}
+
+\author{\IEEEauthorblockN{Gregorio Morillo Zamora | Raúl Jimenez Pérez}
+\IEEEauthorblockA{\textit{Inteligencia Artificial - Ingeniería Informática. Ingeniería del Software} \\
+Curso 2025/2026}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+En este trabajo se aborda la resolución del juego de solitario Senku mediante técnicas de planificación automática. Se explora el modelado del dominio del juego utilizando PDDL y la implementación de algoritmos de búsqueda para encontrar secuencias de acciones válidas que permitan alcanzar un estado objetivo, definido como la presencia de una única pieza en el tablero.
+\end{abstract}
+
+\section{Introducción}
+El juego del Senku, también conocido como solitario, constituye un entorno clásico y de gran utilidad en el campo de la Inteligencia Artificial. Al tratarse de un juego de un solo jugador, permite la evaluación rigurosa del desempeño de agentes y algoritmos de búsqueda en un espacio de estados definido.
+
+El objetivo principal de este proyecto es el diseño de un sistema capaz de representar el problema del Senku, permitiendo su resolución automática mediante la aplicación de algoritmos de búsqueda. El trabajo se estructura en torno a varios objetivos específicos:
+\begin{itemize}
+    \item Expresar formalmente el problema del Senku mediante el lenguaje PDDL.
+    \item Implementar un motor de búsqueda en Python capaz de resolver el tablero clásico bidimensional.
+    \item Aplicar algoritmos específicos de búsqueda, evaluando su eficiencia y capacidad para resolver diversas variantes del tablero.
+    \item Documentar el proceso de diseño, las decisiones tomadas y los resultados experimentales obtenidos bajo una metodología científica.
+\end{itemize}
+
+A diferencia de versiones más restrictivas del problema, en este trabajo se considera como estado objetivo cualquier configuración final donde exista únicamente una pieza en el tablero, independientemente de su posición final. No obstante, se realiza una exploración adicional de configuraciones iniciales que permitan alcanzar el objetivo en la posición del hueco original, profundizando así en la complejidad y las propiedades del juego.
+
+La memoria se organiza de la siguiente manera: tras esta introducción, se describe el lenguaje de modelado, se detallan los algoritmos implementados, se presentan los resultados obtenidos y, finalmente, se extraen las conclusiones del estudio.
+
+\end{document}
