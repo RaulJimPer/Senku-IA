@@ -31,14 +31,73 @@ class Nodo:
         plan.reverse()
         return plan
 
-def busqueda_ciega(problema, usar_bfs=True):
+def _filtrar_fluentes_relevantes(initial_values):
+    """
+    Filtra solo los fluentes que pueden cambiar durante la ejecución
+    (pieza y vacio), ignorando adyacente que es estático.
+    Retorna lista de claves.
+    """
+    return [k for k in initial_values.keys()
+            if k.fluent().name in ('pieza', 'vacio')]
+
+def _extraer_adyacencias(initial_values):
+    """
+    Extrae todos los triples (origen, intermedia, destino) del predicado
+    adyacente que están definidos en el estado inicial.
+    Devuelve una lista de tuplas (origen, intermedia, destino).
+    """
+    adyacencias = []
+    for k, v in initial_values.items():
+        if k.fluent().name == 'adyacente' and v.is_true():
+            adyacencias.append(tuple(k.args))
+    return adyacencias
+
+def _generar_movimientos(adyacencias, accion_saltar, cached_keys, estado):
+    """
+    Genera los movimientos válidos para un estado dado sin usar el
+    grounder del simulador (que es muy lento).
+    
+    :param adyacencias: Lista de tuplas (origen, intermedia, destino)
+    :param accion_saltar: Objeto Action de UP para saltar
+    :param cached_keys: Lista de fluentes relevantes (pieza/vacio)
+    :param estado: Estado actual del simulador
+    :return: Lista de ActionInstance válidas
+    """
+    # Construir conjunto rápido de piezas y vacíos
+    piezas = set()
+    vacios = set()
+    for fluente in cached_keys:
+        try:
+            val = estado.get_value(fluente)
+            if val.is_true():
+                name = fluente.fluent().name
+                obj = fluente.args[0]
+                if name == 'pieza':
+                    piezas.add(obj)
+                elif name == 'vacio':
+                    vacios.add(obj)
+        except Exception:
+            pass
+
+    movimientos = []
+    for origen, intermedia, destino in adyacencias:
+        if origen in piezas and intermedia in piezas and destino in vacios:
+            movimientos.append((accion_saltar, (origen, intermedia, destino)))
+    return movimientos
+
+def busqueda_ciega(problema, usar_bfs=True, max_profundidad=None):
     """
     Ejecuta una búsqueda básica sobre un problema PDDL.
     
     :param problema: Instancia del problema cargado desde UP.
     :param usar_bfs: True para Búsqueda en Anchura (BFS), False para Profundidad (DFS).
+    :param max_profundidad: Límite de profundidad (None = sin límite).
     :return: Lista de acciones que resuelven el problema, o None si no hay solución.
     """
+    
+    cached_keys = _filtrar_fluentes_relevantes(problema.initial_values)
+    adyacencias = _extraer_adyacencias(problema.initial_values)
+    accion_saltar = problema.action('saltar')
     
     with SequentialSimulator(problem=problema) as simulador:
         estado_inicial = simulador.get_initial_state()
@@ -50,7 +109,7 @@ def busqueda_ciega(problema, usar_bfs=True):
 
         frontera = deque([nodo_raiz])
         visitados = set()
-        visitados.add(hash_estado(estado_inicial, problema))
+        visitados.add(hash_estado(estado_inicial, cached_keys))
         
         nodos_expandidos = 0
 
@@ -64,8 +123,13 @@ def busqueda_ciega(problema, usar_bfs=True):
             
             if nodos_expandidos % 50 == 0:
                 print(f"Nodos expandidos: {nodos_expandidos}, Frontera: {len(frontera)}")
+            
+            if max_profundidad is not None and nodo_actual.profundidad >= max_profundidad:
+                continue
 
-            acciones_aplicables = simulador.get_applicable_actions(nodo_actual.estado)
+            acciones_aplicables = _generar_movimientos(
+                adyacencias, accion_saltar, cached_keys, nodo_actual.estado
+            )
 
             for accion in acciones_aplicables:
                 
@@ -83,7 +147,7 @@ def busqueda_ciega(problema, usar_bfs=True):
                 if estado_sucesor is None:
                     continue
                 
-                hash_sucesor = hash_estado(estado_sucesor, problema)
+                hash_sucesor = hash_estado(estado_sucesor, cached_keys)
 
                 if hash_sucesor not in visitados:
                     
@@ -111,15 +175,15 @@ def busqueda_ciega(problema, usar_bfs=True):
         print(f"\nBúsqueda finalizada sin éxito. Nodos expandidos en total: {nodos_expandidos}")
         return None
     
-def hash_estado(estado, problema):
+def hash_estado(estado, cached_keys):
     """
     Convierte el estado de UP en un frozenset inmutable.
-    Utiliza las claves del estado inicial como 'plantilla' para preguntar
-    por el valor de cada fluente, sorteando el problema de los estados delta.
+    Recibe las claves de fluentes ya extraídas (cached) para evitar
+    iterar sobre problema.initial_values.keys() en cada llamada.
     """
     fluentes_activos = []
     
-    for fluente in problema.initial_values.keys():
+    for fluente in cached_keys:
         try:
             if estado.get_value(fluente).is_true():
                 fluentes_activos.append(str(fluente))
