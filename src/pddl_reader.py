@@ -88,6 +88,13 @@ if __name__ == "__main__":
         fluentes = lector_senku.cargar_fluentes()
         print(f"Fluentes cargados: {len(fluentes)}")
         
+        pagoda_v1 = lector_senku.funcion_pagoda(fluentes, variante=1)
+        pagoda_v2 = lector_senku.funcion_pagoda(fluentes, variante=2)
+        pagoda_v3 = lector_senku.funcion_pagoda(fluentes, variante=3)
+        print(f"Pagoda V1: {pagoda_v1}")
+        print(f"Pagoda V2: {pagoda_v2}")
+        print(f"Pagoda V3: {pagoda_v3}")
+        
         acciones = lector_senku.obtener_acciones_aplicables()
         for accion in acciones:
             print(f"Acción: {accion.name} - Params: {[p.name for p in accion.parameters]}")
