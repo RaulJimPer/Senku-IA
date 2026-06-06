@@ -1,10 +1,12 @@
+from unified_planning.shortcuts import SequentialSimulator
 from src.basic_search import (
-    Nodo, 
-    _filtrar_fluentes_relevantes, 
-    _extraer_adyacencias, 
-    _generar_movimientos, 
-    hash_estado
+    Nodo,
+    _filtrar_fluentes_relevantes,
+    _extraer_adyacencias,
+    _generar_movimientos,
+    hash_estado,
 )
+from src.pddl_reader import SenkuPDDLReader
 
 def heuristica_senku(estado, cached_keys):
     """
@@ -13,36 +15,20 @@ def heuristica_senku(estado, cached_keys):
     es la suma de los pesos de las casillas ocupadas por piezas. Menor
     valor = estado más cercano al objetivo (pieza en el centro).
     """
-    # Matriz de pesos para tablero 7x7 (índices 1..7). Zonas no válidas
-    # (esquinas) se mantienen a 0. Valores elegidos simétricamente.
-    pagoda_matrix = [
-        [0, 0, 3, 3, 3, 0, 0],
-        [0, 2, 3, 3, 3, 2, 0],
-        [3, 3, 4, 4, 4, 3, 3],
-        [3, 3, 4, 0, 4, 3, 3],
-        [3, 3, 4, 4, 4, 3, 3],
-        [0, 2, 3, 3, 3, 2, 0],
-        [0, 0, 3, 3, 3, 0, 0],
-    ]
-
-    score = 0
+    # Construir lista de fluentes activos a partir del estado
+    activos = []
     for fluente in cached_keys:
         try:
             val = estado.get_value(fluente)
-            if val.is_true() and fluente.fluent().name == 'pieza':
-                p_name = str(fluente.args[0])
-                if p_name.startswith('c') and len(p_name) >= 3:
-                    try:
-                        x = int(p_name[1])
-                        y = int(p_name[2])
-                        if 1 <= x <= 7 and 1 <= y <= 7:
-                            score += pagoda_matrix[x-1][y-1]
-                    except ValueError:
-                        pass
+            if val.is_true():
+                activos.append(fluente)
         except Exception:
             pass
 
-    return score
+    # Usar la función pagoda definida en `src/pddl_reader.py`.
+    lector = SenkuPDDLReader(None, None)
+    # Variante por defecto = 1 (puede ajustarse si se desea)
+    return lector.funcion_pagoda(activos, variante=1)
 
 def busqueda_haz(problema, tamano_haz=50, max_profundidad=None):
     """
