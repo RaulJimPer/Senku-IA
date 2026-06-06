@@ -31,38 +31,50 @@ class SenkuPDDLReader:
 
         return self.problem.actions
 
+    def _extraer_coordenadas(self, fluente):
+        """
+        Extrae el nombre de la casilla (ej. 'c31') de un fluente,
+        tanto si es un objeto fluent de UP como si es un string 'pieza(c31)'.
+        Retorna None si no es un fluente de pieza.
+        """
+        if isinstance(fluente, str):
+            if not fluente.startswith("pieza("):
+                return None
+            return fluente[6:-1]
+        else:
+            if fluente.fluent().name != 'pieza':
+                return None
+            return str(fluente.args[0])
+
     def funcion_pagoda(self, fluentes_activos, variante=1):
         """
         Calcula el valor de la función pagoda para un estado dado.
         Existen distintas variantes de la función pagoda para Senku, 
         basadas en asignar un 1 a ciertas casillas y 0 a las demás.
         
-        :param fluentes_activos: Diccionario o iterable de fluentes activos en el estado
+        :param fluentes_activos: Iterable de fluentes activos (objetos UP o strings 'pieza(cXX)')
         :param variante: 1, 2 o 3, correspondiente a distintas asignaciones de pagoda
         :return: Valor total (entero)
         """
         suma = 0
         for fluente in fluentes_activos:
-            # Solo nos interesan las casillas ocupadas por una pieza
-            if fluente.fluent().name == 'pieza':
-                casilla = str(fluente.args[0])
-                if len(casilla) == 3 and casilla.startswith('c'):
-                    x = int(casilla[1])
-                    y = int(casilla[2])
-                    
-                    if variante == 1:
-                        # Variante 1: 1 si 'x' e 'y' son impares
-                        if x % 2 == 1 and y % 2 == 1:
-                            suma += 1
-                    elif variante == 2:
-                        # Variante 2: 1 si 'x' e 'y' son pares
-                        if x % 2 == 0 and y % 2 == 0:
-                            suma += 1
-                    elif variante == 3:
-                        # Variante 3: 1 si 'x' es par e 'y' es impar
-                        if x % 2 == 0 and y % 2 == 1:
-                            suma += 1
-                            
+            casilla = self._extraer_coordenadas(fluente)
+            if casilla is None:
+                continue
+            if len(casilla) == 3 and casilla.startswith('c'):
+                x = int(casilla[1])
+                y = int(casilla[2])
+
+                if variante == 1:
+                    if x % 2 == 1 and y % 2 == 1:
+                        suma += 1
+                elif variante == 2:
+                    if x % 2 == 0 and y % 2 == 0:
+                        suma += 1
+                elif variante == 3:
+                    if x % 2 == 0 and y % 2 == 1:
+                        suma += 1
+
         return suma
 
 if __name__ == "__main__":
