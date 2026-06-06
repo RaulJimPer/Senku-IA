@@ -3,6 +3,8 @@
 \usepackage[spanish]{babel}
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage[kw]{pseudo}
 
 \title{Planificación automática aplicada al Senku}
 
@@ -46,5 +48,68 @@ El objetivo principal de este proyecto es el diseño de un sistema capaz de repr
 A diferencia de versiones más restrictivas del problema, en este trabajo se considera como estado objetivo cualquier configuración final donde exista únicamente una pieza en el tablero, independientemente de su posición final. No obstante, se realiza una exploración adicional de configuraciones iniciales que permitan alcanzar el objetivo en la posición del hueco original, profundizando así en la complejidad y las propiedades del juego.
 
 La memoria se organiza de la siguiente manera: tras esta introducción, se describe el lenguaje de modelado, se detallan los algoritmos implementados, se presentan los resultados obtenidos y, finalmente, se extraen las conclusiones del estudio.
+
+\section{Metodología}
+
+En esta sección se describen los algoritmos implementados para la resolución del Senku. Cada algoritmo se presenta en un subapartado independiente, detallando su funcionamiento, las variantes consideradas y las decisiones de diseño adoptadas para superar las dificultades encontradas durante su implementación.
+
+\subsection{Búsqueda básica en espacio de estados}
+
+El primer algoritmo implementado consiste en una exploración sistemática del árbol de juego del Senku mediante búsqueda ciega, es decir, sin emplear ninguna función heurística que guíe la exploración. El problema se modela como un grafo dirigido donde cada nodo representa una configuración del tablero (posición de las piezas y huecos) y cada arista dirigida representa un movimiento válido, esto es, el salto de una pieza sobre otra adyacente hacia un hueco libre.
+
+El algoritmo mantiene dos estructuras de datos fundamentales durante su ejecución. La primera es la \textit{frontera}, una colección que almacena los nodos pendientes de explorar y cuyo orden de extracción determina la estrategia de búsqueda. La segunda es el \textit{conjunto de visitados}, que almacena una representación resumida (mediante una función hash) de todos los estados que ya han sido explorados, evitando así que el algoritmo entre en ciclos infinitos al alcanzar un estado previamente visitado.
+
+En cada iteración, el algoritmo extrae un nodo de la frontera, genera todos los movimientos válidos desde el estado representado por dicho nodo y, para cada uno, aplica la transición correspondiente para obtener el estado sucesor. Si el estado sucesor no ha sido visitado con anterioridad, se comprueba si cumple la condición de objetivo (una única pieza en el centro del tablero). En caso afirmativo, el algoritmo reconstruye la secuencia de acciones recorriendo hacia atrás las referencias al nodo padre; en caso negativo, el nodo sucesor se añade a la frontera y el original al conjunto de visitados, y el proceso continúa. Si la frontera se vacía sin haber encontrado una solución, el algoritmo concluye que no existe ningún plan de movimientos que alcance el estado objetivo desde la configuración inicial dada.
+
+\subsubsection{Variantes: BFS y DFS}
+
+El algoritmo admite dos variantes según la política de extracción de la frontera:
+
+\begin{itemize}
+    \item \textbf{Búsqueda en anchura (BFS)}: la frontera se gestiona como una cola FIFO (\textit{first in, first out}). Esta variante garantiza que la primera solución encontrada es la de menor número de movimientos posibles. Sin embargo, su consumo de memoria crece exponencialmente con la profundidad del árbol, lo que la hace inviable para el tablero clásico completo en un ordenador convencional, dado el enorme volumen de estados que deben mantenerse simultáneamente en la frontera.
+    \item \textbf{Búsqueda en profundidad (DFS)}: la frontera se gestiona como una pila LIFO (\textit{last in, first out}). Esta variante requiere menos memoria que BFS, ya que explora un único camino hasta agotarlo antes de retroceder. No obstante, no garantiza encontrar la solución de profundidad mínima y, sin un límite adecuado, puede perderse en ramas muy profundas del árbol sin alcanzar el objetivo.
+\end{itemize}
+
+Para la verificación temprana del correcto funcionamiento de ambas variantes se empleó un tablero reducido de solo tres piezas. Esto permitió depurar la lógica del algoritmo y confirmar que los planes generados eran válidos antes de abordar el tablero clásico completo, cuyo espacio de búsqueda es significativamente mayor.
+
+\subsubsection{Pseudocódigo}
+
+A continuación se presenta el pseudocódigo unificado del algoritmo de búsqueda básica. Presentamos antes algunas aclaraciones para facilitar la comprensión del pseudocódigo que define el algoritmo. La función \texttt{elegir\_nodo} determina la variante: si se trata de BFS, extrae el primer elemento de la frontera (FIFO); si se trata de DFS, extrae el último (LIFO). La función \texttt{generar\_movimientos} obtiene todos los saltos válidos desde el estado actual comprobando, para cada tripleta de casillas adyacentes, que la casilla origen contiene una pieza, la casilla intermedia contiene una pieza y la casilla destino está vacía. La función \texttt{aplicar} ejecuta la transición y produce el nuevo estado. La función \texttt{hash} construye un identificador inmutable del estado considerando únicamente aquellas casillas ocupadas por una pieza, lo que permite la detección eficiente de estados repetidos.
+
+\begin{figure}
+  \begin{pseudo}*
+    \hd{\fn{busquedaBasica}}(estadoInicial, usarBFS) \\*
+    \multicolumn{2}{l}{\textbf{Entrada}: \textnormal{estado inicial del tablero, modo de búsqueda}} \\*
+    \multicolumn{2}{l}{\textbf{Salida}: plan de acciones o indicador de fracaso} \\
+    frontera $\leftarrow$ [\pr{nodo}(estadoInicial)] \\
+    visitados $\leftarrow$ \{ \pr{hash}(estadoInicial) \} \\
+    \textbf{mientras} frontera \textnormal{no esté vacía} \textbf{hacer} \\+
+        nodo $\leftarrow$ \pr{elegirNodo}(frontera, usarBFS) \\
+        acciones $\leftarrow$ \pr{generarMovimientos}(nodo.estado) \\
+        \textbf{para cada} \textnormal{acción} \textbf{en} \textnormal{acciones} \textbf{hacer} \\+
+            sucesor $\leftarrow$ \pr{aplicar}(\textnormal{acción}, nodo.estado) \\
+            \textbf{si} \pr{hash}(sucesor) $\notin$ visitados \textbf{entonces} \\+
+                \textbf{si} \pr{esObjetivo}(sucesor) \textbf{entonces} \\+
+                    \textbf{devolver} \pr{reconstruirPlan}(sucesor) \\-
+                visitados $\leftarrow$ visitados $\cup$ \{ \pr{hash}(sucesor) \} \\
+                frontera $\leftarrow$ frontera $\cup$ [\pr{nodo}(sucesor, nodo, \textnormal{acción})] \\-
+            \textbf{fin si} \\-
+        \textbf{fin para} \\-
+    \textbf{fin mientras} \\
+    \textbf{devolver} \textnormal{fracaso}
+  \end{pseudo}
+  \caption{Algoritmo de búsqueda básica en espacio de estados (BFS/DFS)}
+  \label{pcd:basica}
+\end{figure}
+
+\subsubsection{Dificultades encontradas y decisiones de diseño}
+
+La principal dificultad encontrada durante la implementación de este algoritmo fue el rendimiento, motivado por la enorme dimensión del espacio de estados del Senku clásico. A continuación se detallan los problemas específicos y las soluciones adoptadas.
+
+El primer problema identificado fue la generación de los movimientos aplicables desde un estado. La librería Unified Planning proporciona un simulador que, para cada estado, recalca todas las posibles instanciaciones de la acción \texttt{saltar} combinando todos los objetos del dominio, lo que resulta en un proceso de grounded intensivo. Para el tablero clásico, con 33 casillas, esto supone evaluar más de treinta mil combinaciones de parámetros en cada nodo, con un coste temporal del orden de decenas de segundos por operación, lo cual es inasumible para una búsqueda que debe explorar millones de nodos. La solución consistió en extraer las relaciones de adyacencia del problema una única vez al inicio de la búsqueda y, a partir de entonces, generar los movimientos válidos comprobando directamente sobre cada tripleta de casillas adyacentes si se cumplen las precondiciones de la acción. Esta comprobación se reduce a verificar tres condiciones booleanas en memoria, reduciendo el coste drásticamente y haciendo viable la exploración.
+
+El segundo problema derivaba del cálculo del identificador hash de cada estado para el conjunto de visitados. Inicialmente, el hash se construía recorriendo todos los fluentes definidos en el estado inicial del problema PDDL. Sin embargo, el predicado \texttt{adyacente} genera miles de fluentes estáticos (que nunca cambian durante la partida) y que son innecesarios para distinguir un estado de otro. La solución fue filtrar estos fluentes, considerando únicamente aquellos correspondientes a los predicados \texttt{pieza} y \texttt{vacio}, que son los únicos que varían con cada movimiento. Esto redujo el número de fluentes a evaluar por hash en más de un 99\%, acelerando significativamente cada llamada.
+
+Estas optimizaciones permitieron que el algoritmo completase la exploración a una velocidad del orden de varios cientos de nodos por segundo, haciendo factible la resolución del tablero clásico en un tiempo del orden de horas. No obstante, queda patente que una búsqueda puramente ciega, sin información heurística que guíe la exploración hacia los estados más prometedores, tiene dificultades para escalar a problemas de gran tamaño. Esta limitación motiva la incorporación de técnicas de búsqueda informada que se describen en las siguientes secciones.
 
 \end{document}
