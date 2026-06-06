@@ -1,4 +1,3 @@
-from unified_planning.shortcuts import SequentialSimulator
 from src.basic_search import (
     Nodo, 
     _filtrar_fluentes_relevantes, 
@@ -9,28 +8,41 @@ from src.basic_search import (
 
 def heuristica_senku(estado, cached_keys):
     """
-    Calcula una heurística simple: la suma de las distancias Manhattan
-    de todas las piezas al centro del tablero (c44).
-    Menor valor = piezas más centradas = mejor estado.
+    Heurística Pagoda para Senku (una ponderación por posición).
+    Se asigna un peso fijo a cada casilla (pagoda weights). La heurística
+    es la suma de los pesos de las casillas ocupadas por piezas. Menor
+    valor = estado más cercano al objetivo (pieza en el centro).
     """
-    distancia = 0
+    # Matriz de pesos para tablero 7x7 (índices 1..7). Zonas no válidas
+    # (esquinas) se mantienen a 0. Valores elegidos simétricamente.
+    pagoda_matrix = [
+        [0, 0, 3, 3, 3, 0, 0],
+        [0, 2, 3, 3, 3, 2, 0],
+        [3, 3, 4, 4, 4, 3, 3],
+        [3, 3, 4, 0, 4, 3, 3],
+        [3, 3, 4, 4, 4, 3, 3],
+        [0, 2, 3, 3, 3, 2, 0],
+        [0, 0, 3, 3, 3, 0, 0],
+    ]
+
+    score = 0
     for fluente in cached_keys:
         try:
             val = estado.get_value(fluente)
             if val.is_true() and fluente.fluent().name == 'pieza':
                 p_name = str(fluente.args[0])
-                # Las casillas tienen el formato cXY
                 if p_name.startswith('c') and len(p_name) >= 3:
                     try:
                         x = int(p_name[1])
                         y = int(p_name[2])
-                        # Asumiendo que el centro es la fila 4, columna 4
-                        distancia += abs(x - 4) + abs(y - 4)
+                        if 1 <= x <= 7 and 1 <= y <= 7:
+                            score += pagoda_matrix[x-1][y-1]
                     except ValueError:
                         pass
         except Exception:
             pass
-    return distancia
+
+    return score
 
 def busqueda_haz(problema, tamano_haz=50, max_profundidad=None):
     """
@@ -67,7 +79,6 @@ def busqueda_haz(problema, tamano_haz=50, max_profundidad=None):
                 
             sucesores = []
             
-            # Expandir todos los nodos del nivel actual
             for nodo_actual in frontera:
                 nodos_expandidos += 1
                 
@@ -113,10 +124,8 @@ def busqueda_haz(problema, tamano_haz=50, max_profundidad=None):
                         )
                         sucesores.append(nuevo_nodo)
             
-            # Evaluar y ordenar sucesores usando la heurística (menor costo primero)
             sucesores.sort(key=lambda n: heuristica_senku(n.estado, cached_keys))
             
-            # Poda del Haz: conservar únicamente los mejores "tamano_haz" nodos
             frontera = sucesores[:tamano_haz]
             nivel += 1
 
