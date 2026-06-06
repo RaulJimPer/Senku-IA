@@ -2,6 +2,7 @@ import os
 import time
 from src.pddl_reader import SenkuPDDLReader
 from src.basic_search import busqueda_ciega
+from src.bean_search import busqueda_haz
 
 def imprimir_plan(plan):
     """
@@ -51,12 +52,21 @@ if __name__ == "__main__":
         print(f"Error al leer los archivos PDDL: {e}")
         exit(1)
 
+    usar_beam_search = True
     usar_anchura = False
-    modo = "Anchura (BFS)" if usar_anchura else "Profundidad (DFS)"
+
+    if usar_beam_search:
+        modo = "Haz (Beam Search)"
+    else:
+        modo = "Anchura (BFS)" if usar_anchura else "Profundidad (DFS)"
+        
     print(f"Iniciando Búsqueda en {modo}...")
     
     inicio_tiempo = time.time()
-    plan_solucion = busqueda_ciega(problema, usar_bfs=usar_anchura)
+    if usar_beam_search:
+        plan_solucion = busqueda_haz(problema, tamano_haz=50)
+    else:
+        plan_solucion = busqueda_ciega(problema, usar_bfs=usar_anchura)
     
     fin_tiempo = time.time()
     tiempo_total = fin_tiempo - inicio_tiempo
