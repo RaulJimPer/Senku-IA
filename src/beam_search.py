@@ -5,21 +5,26 @@ from src.helpers import (
     extraer_adyacencias,
     generar_movimientos,
     hash_estado,
+    contar_piezas,
 )
 from src.heuristic import heuristica_senku
 
 
-def busqueda_haz(problema, tamano_haz=50, max_profundidad=None, variante_pagoda=1):
+def busqueda_haz(problema, tamano_haz=50, max_profundidad=None, variante_pagoda=1, variante_pagoda_secundaria=None, variantes_pagoda=None, goal_anywhere=True):
     """
     Ejecuta el algoritmo Beam Search (Busqueda en Haz) sobre un problema PDDL.
     En cada nivel del arbol genera todos los sucesores de los nodos actuales,
-    los ordena por la heuristica pagoda y conserva solo los `tamano_haz` mejores.
+    los ordena por la heuristica pagoda (y secundaria/terciaria en caso de empate)
+    y conserva solo los `tamano_haz` mejores.
     El proceso se repite hasta encontrar el objetivo o agotar el espacio de busqueda.
 
     :param problema: Instancia del problema cargado desde UP.
     :param tamano_haz: Numero maximo de nodos a conservar por nivel (anchura del haz).
     :param max_profundidad: Limite de profundidad (None = sin limite).
-    :param variante_pagoda: Variante de la funcion pagoda para la heuristica (1, 2 o 3).
+    :param variante_pagoda: Variante de pagoda primaria (1, 2 o 3). Se ignora si variantes_pagoda no es None.
+    :param variante_pagoda_secundaria: Variante secundaria para desempate (None = solo primaria). Se ignora si variantes_pagoda no es None.
+    :param variantes_pagoda: Lista de variantes para ordenacion multiple (ej. [1,2,3] para las tres). Si no es None, anula primaria y secundaria.
+    :param goal_anywhere: Si True, acepta cualquier estado con 1 pieza como solucion.
     :return: Lista de acciones que resuelven el problema, o None si no hay solucion.
     """
     cached_keys = filtrar_fluentes_relevantes(problema.initial_values)
@@ -28,12 +33,17 @@ def busqueda_haz(problema, tamano_haz=50, max_profundidad=None, variante_pagoda=
 
     with SequentialSimulator(problem=problema) as simulador:
         estado_inicial = simulador.get_initial_state()
+
+        if goal_anywhere:
+            if contar_piezas(estado_inicial, cached_keys) <= 1:
+                print("El estado inicial ya es el objetivo (1 pieza o menos).")
+                return []
+        else:
+            if simulador.is_goal(estado_inicial):
+                print("El estado inicial ya es el objetivo.")
+                return []
+
         nodo_raiz = Nodo(estado=estado_inicial)
-
-        if simulador.is_goal(estado_inicial):
-            print("El estado inicial ya es el objetivo.")
-            return []
-
         frontera = [nodo_raiz]
         visitados = set()
         visitados.add(hash_estado(estado_inicial, cached_keys))
@@ -72,7 +82,15 @@ def busqueda_haz(problema, tamano_haz=50, max_profundidad=None, variante_pagoda=
 
                     hash_sucesor = hash_estado(estado_sucesor, cached_keys)
                     if hash_sucesor not in visitados:
-                        if simulador.is_goal(estado_sucesor):
+                        es_objetivo = False
+                        if goal_anywhere:
+                            if contar_piezas(estado_sucesor, cached_keys) <= 1:
+                                es_objetivo = True
+                        else:
+                            if simulador.is_goal(estado_sucesor):
+                                es_objetivo = True
+
+                        if es_objetivo:
                             nodo_objetivo = Nodo(
                                 estado=estado_sucesor,
                                 padre=nodo_actual,
@@ -94,7 +112,12 @@ def busqueda_haz(problema, tamano_haz=50, max_profundidad=None, variante_pagoda=
                         )
                         sucesores.append(nuevo_nodo)
 
-            sucesores.sort(key=lambda n: heuristica_senku(n.estado, cached_keys, variante_pagoda))
+            if variantes_pagoda is not None:
+                sucesores.sort(key=lambda n: tuple(heuristica_senku(n.estado, cached_keys, variante_pagoda=v) for v in variantes_pagoda))
+            elif variante_pagoda_secundaria is not None:
+                sucesores.sort(key=lambda n: (heuristica_senku(n.estado, cached_keys, variante_pagoda=variante_pagoda), heuristica_senku(n.estado, cached_keys, variante_pagoda=variante_pagoda_secundaria)))
+            else:
+                sucesores.sort(key=lambda n: heuristica_senku(n.estado, cached_keys, variante_pagoda=variante_pagoda))
 
             frontera = sucesores[:tamano_haz]
             nivel += 1

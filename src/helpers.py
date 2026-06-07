@@ -94,6 +94,26 @@ def generar_movimientos(adyacencias, accion_saltar, cached_keys, estado):
     return movimientos
 
 
+def contar_piezas(estado, cached_keys):
+    """
+    Cuenta las piezas presentes en un estado del tablero.
+
+    :param estado: Estado del simulador UP.
+    :param cached_keys: Lista de fluentes relevantes (pieza/vacio).
+    :return: Numero de piezas en el estado.
+    """
+    piezas = 0
+    for fluente in cached_keys:
+        if fluente.fluent().name == 'pieza':
+            try:
+                val = estado.get_value(fluente)
+                if val.is_true():
+                    piezas += 1
+            except Exception:
+                pass
+    return piezas
+
+
 def hash_estado(estado, cached_keys):
     """
     Convierte un estado de UP en un frozenset inmutable para su uso en el
