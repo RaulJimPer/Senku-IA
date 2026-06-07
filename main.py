@@ -2,7 +2,7 @@ import os
 import time
 from src.pddl_reader import SenkuPDDLReader
 from src.basic_search import busqueda_ciega
-from src.bean_search import busqueda_haz
+from beam_search import busqueda_haz
 
 def imprimir_plan(plan):
     """
