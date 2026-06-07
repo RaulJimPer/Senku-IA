@@ -112,4 +112,151 @@ El segundo problema derivaba del cálculo del identificador hash de cada estado 
 
 Estas optimizaciones permitieron que el algoritmo completase la exploración a una velocidad del orden de varios cientos de nodos por segundo, haciendo factible la resolución del tablero clásico en un tiempo del orden de horas. No obstante, queda patente que una búsqueda puramente ciega, sin información heurística que guíe la exploración hacia los estados más prometedores, tiene dificultades para escalar a problemas de gran tamaño. Esta limitación motiva la incorporación de técnicas de búsqueda informada que se describen en las siguientes secciones.
 
+\section{Descripción del módulo src/pddl\_reader.py}
+
+\subsection{Propósito}
+El módulo \texttt{src/pddl\_reader.py} proporciona utilidades para cargar un dominio y un problema PDDL usando la librería \texttt{unified\_planning}, extraer los fluentes iniciales activos y calcular una función de evaluación simple (denominada "función pagoda") sobre un estado dado. Está pensado como una pieza de integración entre los ficheros PDDL en el directorio \texttt{PDDL/} y los algoritmos de búsqueda implementados en \texttt{src/}.
+
+\subsection{Estructura y API principal}
+El módulo define la clase \texttt{SenkuPDDLReader} con la siguiente interfaz relevante:
+
+\begin{itemize}
+    \item \textbf{\_\_init\_\_}(domain\_path, problem\_path): almacena las rutas del dominio y del problema.
+    \item \textbf{read\_problem()}: utiliza \texttt{PDDLReader.parse\_problem} para parsear y cargar el problema PDDL en memoria, guardándolo en \texttt{self.problem}.
+    \item \textbf{cargar\_fluentes()}: devuelve un diccionario con los fluentes del estado inicial cuyo valor es verdadero. Internamente usa \texttt{self.problem.initial\_values}.
+    \item \textbf{obtener\_acciones\_aplicables()}: devuelve la colección de acciones del problema (\texttt{self.problem.actions}).
+    \item \textbf{funcion\_pagoda(fluentes\_activos, variante)}: calcula una suma entera según una asignación binaria de casillas (tres variantes implementadas). Permite evaluar estados con una heurística muy simple usada para experimentación.
+\end{itemize}
+
+Además hay métodos auxiliares internos:
+\begin{itemize}
+    \item \textbf{\_extraer\_coordenadas(fluente)}: normaliza la representación de un fluente de pieza aceptando tanto objetos fluente devueltos por Unified Planning como cadenas del tipo \texttt{pieza(c31)}. Devuelve el identificador de casilla (por ejemplo \texttt{c31}) o \texttt{None} si no aplica.
+\end{itemize}
+
+\subsection{Decisiones de diseño importantes}
+\begin{itemize}
+    \item \textbf{Integración con Unified Planning}: el módulo delega el parseo completo del PDDL en \texttt{unified\_planning.io.PDDLReader}. Esto simplifica el código y garantiza compatibilidad con la API de UP, a costa de depender de su representación interna de fluentes y acciones.
+    \item \textbf{Representación flexible de fluentes}: \texttt{\_extraer\_coordenadas} admite tanto objetos fluente como cadenas, lo que facilita reutilizar la función con distintas partes del proyecto (por ejemplo, al comparar valores guardados en estructuras propias frente a la salida directa de UP).
+    \item \textbf{Función pagoda ligera}: se implementaron tres variantes sencillas de la función pagoda como heurísticas experimentales. Las variantes están basadas en patrones sobre índices de casilla (par/impar) y son rápidas de calcular.
+    \item \textbf{Simplicidad y legibilidad}: el módulo prioriza claridad sobre microoptimización; operaciones de carga y cálculo se mantienen explícitas para facilitar la inspección durante la experimentación.
+\end{itemize}
+
+\subsection{Limitaciones y observaciones}
+\begin{itemize}
+    \item \textbf{Formato de casilla asumido}: \texttt{funcion\_pagoda} asume identificadores de casilla de longitud 3 que comienzan por \texttt{c} y continúan con dos dígitos únicos (por ejemplo \texttt{c31}). Esto falla para índices con más de una cifra por coordenada y debería refactorizarse si se usan tableros con dimensiones mayores o distintas convenciones de nombrado.
+    \item \textbf{Ausencia de manejo de errores robusto}: el módulo captura excepciones en el bloque \texttt{if __name__ == "__main__"} sólo para imprimir errores; sería recomendable añadir validaciones y mensajes más informativos al integrarlo en herramientas automatizadas.
+    \item \textbf{Rendimiento}: la lectura del problema es delegada a Unified Planning; para cargas repetidas grandes podría convenir cachear el resultado de \texttt{read\_problem} o parsear selectivamente los fluentes necesarios.
+\end{itemize}
+
+\subsection{Mejoras sugeridas}
+\begin{itemize}
+    \item Soportar identificadores de casilla genéricos usando expresiones regulares en \texttt{\_extraer\_coordenadas} para admitir índices multi-dígito.
+    \item Añadir funciones utilitarias que extraigan la lista de casillas y relaciones de adyacencia desde \texttt{self.problem} para evitar recalcular adyacencias desde las acciones a lo largo de la búsqueda.
+    \item Incorporar pruebas unitarias que verifiquen la correcta conversión de fluentes y el cálculo de la \textit{pagoda} para distintas variantes y tamaños de tablero.
+\end{itemize}
+
+\section{Descripción de los ficheros en el directorio PDDL}
+
+En el directorio \texttt{PDDL/} se almacenan el dominio común del juego y varios problemas (configuraciones de tablero). A continuación se describe el contenido y las decisiones de diseño principales de cada fichero.
+
+\subsection{\texttt{dominio\_senku.pddl}}
+Fichero que define el dominio PDDL del juego Senku. Contiene:
+\begin{itemize}
+    \item Predicados: \texttt{(pieza ?c)} para casillas ocupadas, \texttt{(vacio ?c)} para casillas libres y \texttt{(adyacente ?c1 ?c2 ?c3)} para tripletas alineadas que representan un salto válido.
+    \item Requerimientos: usa \texttt{:strips}, por tanto las acciones se expresan con precondiciones y efectos clásicos.
+    \item Acción \texttt{saltar}: parámetros \texttt{?origen ?intermedia ?destino}, precondiciones que exigen la pieza origen, la pieza intermedia y destino vacío, además de la relación \texttt{adyacente}. Los efectos actualizan los predicados \texttt{pieza} y \texttt{vacio} apropiadamente.
+\end{itemize}
+
+Diseño notable: la relación \texttt{adyacente} se modela como predicado estático que encadena tres casillas formando una línea de salto; esto evita cálculos geométricos dentro del dominio PDDL pero genera muchos fluentes estáticos en los problemas.
+
+\subsection{\texttt{problema\_senku\_prueba.pddl}}
+Un problema de prueba con un tablero reducido y sólo tres piezas en posiciones concretas. Contiene:
+\begin{itemize}
+    \item Declaración de objetos: lista de identificadores de casilla con convención \texttt{cXY}.
+    \item \texttt{(:init)}: todas las relaciones \texttt{adyacente} necesarias (horizontales y verticales) y un estado inicial reducido donde sólo unas pocas casillas contienen \texttt{pieza} y el resto son \texttt{vacio} según la configuración de prueba.
+    \item \texttt{(:goal)}: estado objetivo específico (se indica una disposición final con una pieza en el centro del tablero de prueba).
+\end{itemize}
+
+Uso: sirve para depurar la lógica del dominio y los algoritmos de búsqueda en un caso pequeño y controlado.
+
+\subsection{\texttt{problema\_senku\_tablero\_clasico.pddl}}
+Problema que modela el tablero clásico de Senku. Estructura similar a la del fichero de prueba pero con el estado inicial completo del tablero clásico (todas las casillas ocupadas salvo el centro) y la definición exhaustiva de \texttt{adyacente} para el tamaño clásico.
+
+Peculiaridad: el estado inicial coloca \texttt{vacio c44} para representar el hueco central; el objetivo exige dejar una única pieza en la posición central (`c44`).
+
+\subsection{\texttt{problema\_senku\_tablero\_variante1.pddl}}
+Variante del tablero con una geometría ligeramente distinta (añade filas/columnas adicionales y casillas intermedias como \texttt{c22}, \texttt{c62}, \texttt{c66}, ...). Contiene su propia lista de objetos, relaciones \texttt{adyacente} adaptadas y un estado inicial/objetivo acordes a la forma de la variante.
+
+Propósito: evaluar el comportamiento del motor de búsqueda frente a tableros no estándar y comprobar la generalidad del modelado basado en \texttt{adyacente} y la convención \texttt{cXY}.
+
+\subsection{\texttt{problema\_senku\_tablero\_variante3.pddl}}
+Variante más grande que extiende filas hasta índices terminados en \texttt{3..8} introduciendo casillas como \texttt{c83}, \texttt{c84}, etc. Mantiene la misma estructura: objetos, muchas relaciones \texttt{adyacente}, estado inicial con casi todas las casillas ocupadas salvo un hueco central (\texttt{vacio c44}) y objetivo consistente con el centro ocupado.
+
+Uso experimental: probar escalabilidad y comprobar que el código acepta dimensiones mayores sin cambios en el dominio.
+
+\subsection{\texttt{problema\_senku\_tablero\_variante5.pddl}}
+Variante irregular y más amplia que utiliza identificadores hasta dos dígitos en la segunda componente (por ejemplo \texttt{c95}) y una topología no rectangular regular. Incluye muchas relaciones \texttt{adyacente} y define un estado inicial y objetivo particular (en este caso, el objetivo mantiene una pieza en una casilla central distinta, e.g., \texttt{pieza c55}).
+
+Notas sobre las variantes:
+\begin{itemize}
+    \item Todas las instancias comparten el mismo \texttt{dominio\_senku.pddl}, lo que facilita reusar el motor de planificación.
+    \item La convención de nombres \texttt{cXY} es consistente en los ficheros, pero algunas variantes usan índices con más de una cifra por coordenada; esto obliga a que cualquier código que extraiga coordenadas (p. ej. \texttt{\_extraer\_coordenadas} en \texttt{src/pddl\_reader.py}) sea robusto frente a identificadores de longitud variable.
+    \item El uso intensivo de \texttt{adyacente} genera muchos fluentes estáticos; en soluciones de búsqueda se recomienda filtrar estos fluentes para acelerar el cálculo de hashes y de movimientos aplicables.
+\end{itemize}
+
+\section{Descripción del módulo src/beam\_search.py}
+
+\subsection{Propósito}
+El módulo \texttt{src/beam\_search.py} implementa la variante de Búsqueda en Haz (Beam Search) adaptada al problema Senku. Proporciona la función principal \texttt{busqueda\_haz(problema, tamano\_haz, max\_profundidad)} que, dada una instancia de problema cargada por \texttt{unified\_planning}, explora los estados por niveles manteniendo únicamente los mejores \texttt{W} sucesores según una heurística ligera.
+
+\subsection{Componentes principales}
+\begin{itemize}
+    \item \textbf{Heurística:} \texttt{heuristica\_senku(estado, cached\_keys)} utiliza la \textit{función pagoda} definida en \texttt{src/pddl\_reader.py} para asignar un valor a un estado (suma de pesos sobre casillas ocupadas). La implementación actual crea un objeto \texttt{SenkuPDDLReader} y llama a \texttt{funcion\_pagoda} con \texttt{variante=1}.
+    \item \textbf{Función principal:} \texttt{busqueda\_haz} realiza las siguientes tareas:
+        \begin{itemize}
+            \item Filtra los fluentes relevantes y extrae las adyacencias usando utilidades de \texttt{src/basic\_search}.
+            \item Usa \texttt{SequentialSimulator} de \texttt{unified\_planning} para generar estados sucesores aplicando la acción \texttt{saltar}.
+            \item Mantiene un conjunto \texttt{visitados} con hashes (\texttt{hash\_estado}) para evitar ciclos.
+            \item En cada nivel genera todos los sucesores, los ordena por heurística y conserva los primeros \texttt{tamano\_haz} para formar la frontera del siguiente nivel.
+        \end{itemize}
+    \item \textbf{Integración:} El módulo depende de \texttt{Nodo}, \texttt{_generar\_movimientos}, \texttt{_extraer\_adyacencias}, \texttt{_filtrar\_fluentes\_relevantes} y \texttt{hash\_estado} definidos en \texttt{src/basic\_search.py}.
+\end{itemize}
+
+\subsection{Decisiones de diseño}
+\begin{itemize}
+    \item \textbf{Simulación fiel a UP:} el uso de \texttt{SequentialSimulator} garantiza que la aplicación de acciones respeta la semántica del problema PDDL y evita reimplementar la dinámica.
+    \item \textbf{Heurística basada en pagoda:} se reutiliza la función pagoda como medida rápida de calidad de estado; se opta por variantes sencillas para mantener el coste heurístico bajo.
+    \item \textbf{Selección por nivel (beam):} ordenar los sucesores por heurística y truncarlos a \texttt{W} es una forma estándar de limitar la expansión en nodos.
+\end{itemize}
+
+\subsection{Limitaciones observadas}
+\begin{itemize}
+    \item \textbf{Creación repetida de lector PDDL:} \texttt{heuristica\_senku} instancia un \texttt{SenkuPDDLReader} en cada llamada, lo que es innecesario si sólo se usa \texttt{funcion\_pagoda}; conviene reutilizar una instancia o extraer la función pagoda estática.
+    \item \textbf{Heurística débil:} la pagoda implementada es muy simple y puede no distinguir bien estados cercanos al objetivo, provocando pérdidas de soluciones si \texttt{tamano\_haz} es pequeño.
+    \item \textbf{Gestión de parámetros de acción:} el código detecta diferentes formatos de acciones (objetos con atributo \texttt{action} o tuplas), lo que añade fragilidad ante cambios en la API de generación de movimientos.
+    \item \textbf{Ausencia de control de tiempo/límite de nodos:} no existe timeout ni límite en número total de nodos expandidos (salvo profundidad), lo que puede bloquear búsquedas largas.
+\end{itemize}
+
+\subsection{Mejoras sugeridas}
+\begin{itemize}
+    \item Reutilizar una sola instancia de \texttt{SenkuPDDLReader} o extraer \texttt{funcion\_pagoda} a una utilidad pura para evitar sobrecoste en la heurística.
+    \item Permitir pasar una heurística por parámetro a \texttt{busqueda\_haz} (por ejemplo una función que reciba \texttt{estado} y \texttt{cached\_keys}).
+    \item Añadir memoización de heurística y un mecanismo de timeout/contador máximo de nodos.
+    \item Mejorar la selección de sucesores usando estructuras más eficientes (p. ej. heap parcial) cuando el número de sucesores es grande en comparación con \texttt{tamano\_haz}.
+    \item Documentar y estandarizar el formato de las acciones generadas por \texttt{_generar\_movimientos} para evitar múltiples ramas de código al extraer \texttt{act} y \texttt{params}.
+\end{itemize}
+
+\subsection{Ejemplo de uso}
+Un uso mínimo desde Python sería:
+\begin{verbatim}
+from unified_planning.io import PDDLReader
+from src.beam_search import busqueda_haz
+
+reader = PDDLReader()
+problema = reader.parse_problem('PDDL/dominio_senku.pddl', 'PDDL/problema_senku_tablero_clasico.pddl')
+plan = busqueda_haz(problema, tamano_haz=100, max_profundidad=50)
+print(plan)
+\end{verbatim}
+
+
 \end{document}
