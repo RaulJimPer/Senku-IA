@@ -1,262 +1,758 @@
-\documentclass[conference]{IEEEtran}
+\documentclass[conference,a4paper]{IEEEtran}
+
 \usepackage[utf8]{inputenc}
 \usepackage[spanish]{babel}
-\usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{cite}
 \usepackage[kw]{pseudo}
+
+
+\def\contentsname{Índice general}
+\def\listfigurename{Índice de figuras}
+\def\listtablename{Índice de tablas}
+\def\refname{Referencias}
+\def\indexname{Índice alfabético}
+\def\figurename{Fig.}
+\def\tablename{TABLA}
+\def\partname{Parte}
+\def\appendixname{Apéndice}
+\def\abstractname{Resumen}
+\def\IEEEkeywordsname{Palabras clave}
+
 
 \title{Planificación automática aplicada al Senku}
 
 \author{
-\IEEEauthorblockN{Gregorio Morillo Zamora}
-\IEEEauthorblockA{
-\textit{Dpto. Ciencias de la Computación e Inteligencia Artificial}\\
-\textit{Universidad de Sevilla}\\
-Sevilla, España\\
-XVJ8387 gremorzam@alum.us.es}
+  \IEEEauthorblockN{Gregorio Morillo Zamora}
+  \IEEEauthorblockA{
+    \textit{Dpto. Ciencias de la Computación e Inteligencia Artificial}\\
+    \textit{Universidad de Sevilla}\\
+    Sevilla, España\\
+    XVJ8387 - gremorzam@alum.us.es}
 
-\and
+  \and
 
-\IEEEauthorblockN{Raúl Jimenez Pérez}
-\IEEEauthorblockA{
-\textit{Dpto. Ciencias de la Computación e Inteligencia Artificial}\\
-\textit{Universidad de Sevilla}\\
-Sevilla, España\\
-LSW694 raujimper@alum.us.es}
+  \IEEEauthorblockN{Raúl Jimenez Pérez}
+  \IEEEauthorblockA{
+    \textit{Dpto. Ciencias de la Computación e Inteligencia Artificial}\\
+    \textit{Universidad de Sevilla}\\
+    Sevilla, España\\
+    LSW694 - raujimper@alum.us.es}
 }
+
 
 \begin{document}
 
 \maketitle
 
+
 \begin{abstract}
-En este trabajo se aborda la resolución del juego de solitario Senku mediante técnicas de planificación automática. Se explora el modelado del dominio del juego utilizando PDDL y la implementación de algoritmos de búsqueda para encontrar secuencias de acciones válidas que permitan alcanzar un estado objetivo, definido como la presencia de una única pieza en el tablero.
+  En este trabajo se aborda la resolución del juego de solitario Senku mediante
+  técnicas de planificación automática. Se modela el dominio empleando el
+  lenguaje PDDL con una única acción parametrizada sobre tripletas de casillas
+  adyacentes, y se implementan dos algoritmos de búsqueda en espacio de estados
+  sobre la representación generada por la librería Unified Planning: una
+  búsqueda básica que explora sistemáticamente el árbol de juego y una búsqueda
+  en haz (beam search) guiada por la heurística de función pagoda. La
+  experimentación sobre cinco configuraciones de tablero (33--41
+  casillas) demuestra que la búsqueda básica resuelve el tablero clásico tras
+  expandir 1,93 millones de nodos, mientras que la búsqueda en haz con pagoda
+  dual permite resolver los tableros clásico, variante~1 y variante~3 en
+  tiempos comprendidos entre 44~s y 204~s. La variante~5, con 41 casillas,
+  no pudo resolverse con ninguna combinación de pagoda, lo que sugiere que la
+  heurística basada exclusivamente en paridad de coordenadas resulta
+  insuficiente para guiar la búsqueda en espacios de estado de mayor tamaño.
 \end{abstract}
 
-\section{Introducción}
-El juego del Senku, también conocido como solitario, constituye un entorno clásico y de gran utilidad en el campo de la Inteligencia Artificial. Al tratarse de un juego de un solo jugador, permite la evaluación rigurosa del desempeño de agentes y algoritmos de búsqueda en un espacio de estados definido.
 
-El objetivo principal de este proyecto es el diseño de un sistema capaz de representar el problema del Senku, permitiendo su resolución automática mediante la aplicación de algoritmos de búsqueda. El trabajo se estructura en torno a varios objetivos específicos:
+\begin{IEEEkeywords}
+  Inteligencia Artificial, Planificación Automática, Senku, PDDL,
+  Búsqueda en Haz, Función Pagoda, Unified Planning.
+\end{IEEEkeywords}
+
+
+\section{Introducción}
+
+El juego del Senku, también conocido como solitario o Peg Solitaire, es un
+pasatiempo de tablero para un solo jugador que ha demostrado ser un entorno
+particularmente fértil para la experimentación en Inteligencia Artificial.
+Su carácter determinista, la existencia de un espacio de estados bien definido
+y la posibilidad de aplicar heurísticas basadas en la geometría del tablero lo
+convierten en un problema de referencia para evaluar el comportamiento de
+agentes de planificación automática y algoritmos de búsqueda en espacio de
+estados~\cite{beasley-peg-solitaire}. El objetivo del juego consiste en reducir
+el número de piezas del tablero hasta dejar una única pieza, idealmente en la
+posición del hueco original, mediante saltos ortogonales sobre piezas
+adyacentes que son eliminadas durante el proceso.
+
+El objetivo principal de este trabajo es diseñar un sistema capaz de
+representar formalmente el problema del Senku y resolverlo de forma automática
+aplicando algoritmos de búsqueda. Para alcanzar este objetivo, la propuesta
+didáctica de la asignatura~\cite{propuesta-senku} establece varios hitos
+específicos que estructuran el desarrollo del proyecto:
 \begin{itemize}
-    \item Expresar formalmente el problema del Senku mediante el lenguaje PDDL.
-    \item Implementar un motor de búsqueda en Python capaz de resolver el tablero clásico bidimensional.
-    \item Aplicar algoritmos específicos de búsqueda, evaluando su eficiencia y capacidad para resolver diversas variantes del tablero.
-    \item Documentar el proceso de diseño, las decisiones tomadas y los resultados experimentales obtenidos bajo una metodología científica.
+  \item Expresar formalmente el problema del Senku en un lenguaje de
+    descripción de dominios, en nuestro caso PDDL, capturando la geometría del
+    tablero y las reglas de movimiento mediante predicados y acciones.
+  \item Implementar en Python un motor de búsqueda básico (BFS/DFS) capaz de
+    explorar el árbol de juego y encontrar soluciones para tableros de tamaño
+    reducido y para el tablero clásico de 33 casillas.
+  \item Diseñar e implementar un algoritmo de búsqueda informada, en concreto
+    búsqueda en haz (beam search), guiado por la heurística de función pagoda,
+    que permita resolver configuraciones de tablero más exigentes: las
+    variantes 1, 3 y 5 definidas en la propuesta del proyecto.
+  \item Documentar el proceso completo de diseño, implementación y
+    experimentación siguiendo un formato de artículo científico, y realizar una
+    presentación oral del trabajo realizado.
 \end{itemize}
 
-A diferencia de versiones más restrictivas del problema, en este trabajo se considera como estado objetivo cualquier configuración final donde exista únicamente una pieza en el tablero, independientemente de su posición final. No obstante, se realiza una exploración adicional de configuraciones iniciales que permitan alcanzar el objetivo en la posición del hueco original, profundizando así en la complejidad y las propiedades del juego.
+El enfoque adoptado para este trabajo ha combinado el estudio teórico de las
+técnicas de planificación vistas en la asignatura con un desarrollo iterativo
+guiado por la experimentación. Como herramienta de apoyo se ha utilizado
+inteligencia artificial generativa para la generación de bocetos iniciales de
+código, la depuración de errores y la redacción de secciones de la memoria,
+siguiendo las directrices de uso responsable establecidas en la
+propuesta~\cite{propuesta-senku}. Todas las contribuciones generadas por estos
+sistemas han sido revisadas, adaptadas y verificadas por los autores, y las
+conversaciones completas están documentadas en los enlaces incluidos en el
+apartado de referencias~\cite{ai-plan-tareas,ai-reglas,ai-pddl-dominio,ai-pddl-claude,ai-basic-search,ai-basic-search-opencode,ai-memoria-opencode,ai-chatgpt-latex,ai-chatgpt-pddl}.
 
-La memoria se organiza de la siguiente manera: tras esta introducción, se describe el lenguaje de modelado, se detallan los algoritmos implementados, se presentan los resultados obtenidos y, finalmente, se extraen las conclusiones del estudio.
+La memoria se organiza de la siguiente manera. La sección~II presenta los
+fundamentos teóricos necesarios para comprender el desarrollo: el juego del
+Senku, el lenguaje PDDL, los conceptos de búsqueda en espacio de estados, la
+función pagoda como heurística y el algoritmo de búsqueda en haz. La
+sección~III describe en detalle la metodología empleada, incluyendo el
+modelado del dominio en PDDL, la implementación de los dos algoritmos de
+búsqueda y las decisiones de diseño adoptadas para superar las dificultades
+encontradas. La sección~IV recoge los resultados experimentales obtenidos
+sobre las cinco configuraciones de tablero, junto con un análisis comparativo.
+Finalmente, la sección~V extrae las conclusiones del trabajo.
+
+
+\section{Preliminares}
+
+\subsection{El juego del Senku}
+
+El Senku es un juego de tablero para un solo jugador que comienza con un
+número $M$ de piezas dispuestas sobre una cuadrícula y un único hueco libre.
+En cada turno, el jugador selecciona una pieza y la desplaza en dirección
+horizontal o vertical haciéndola saltar sobre otra pieza adyacente para
+aterrizar en una casilla vacía inmediatamente posterior. La pieza sobre la que
+se ha saltado es retirada del tablero. Los movimientos en diagonal no están
+permitidos.
+
+El objetivo del juego es reducir el tablero hasta que quede una única pieza.
+En la formulación clásica, esta pieza final debe ocupar la misma posición en
+la que se encontraba el hueco inicial, aunque en este trabajo se adopta una
+definición más flexible que considera como solución cualquier configuración
+con una sola pieza, independientemente de su posición~\cite{propuesta-senku}.
+
+Cada partida de Senku se puede representar como un árbol de juego en el que
+los nodos son las posibles configuraciones del tablero y las aristas son
+movimientos válidos que transforman un estado en otro. Esta estructura hace
+que los algoritmos de búsqueda en grafos sean una herramienta natural para
+explorar el espacio de soluciones.
+
+\subsection{Planificación automática y PDDL}
+
+La planificación automática es una rama de la Inteligencia Artificial que
+estudia cómo generar secuencias de acciones que permitan alcanzar un estado
+objetivo a partir de un estado inicial, dada una descripción formal del
+entorno y de las acciones disponibles~\cite{ghallab-automated-planning}.
+
+PDDL (Planning Domain Definition Language) es el lenguaje estándar para
+describir problemas de planificación. En PDDL se separa la descripción del
+dominio (conceptos generales, predicados y acciones) de la descripción del
+problema (objetos concretos, estado inicial y condición objetivo). Esta
+separación permite reutilizar el mismo dominio para múltiples instancias del
+problema. Para este trabajo se utiliza el subconjunto :strips del lenguaje,
+que permite expresar acciones mediante precondiciones y efectos lógicos.
+
+\subsection{Búsqueda en espacio de estados}
+
+Dado un problema de planificación, se puede construir un grafo dirigido donde
+cada nodo representa un estado del mundo y cada arista la aplicación de una
+acción que transforma un estado en otro. Los algoritmos de búsqueda en espacio
+de estados exploran este grafo partiendo del estado inicial hasta encontrar un
+nodo que satisfaga la condición objetivo.
+
+Dentro de la búsqueda no informada, las dos estrategias fundamentales son:
+\begin{itemize}
+  \item \textbf{Búsqueda en anchura (BFS):} explora el árbol por niveles,
+    expandiendo primero todos los nodos a una misma profundidad antes de pasar
+    al nivel siguiente. Garantiza la solución de menor número de pasos, pero
+    su consumo de memoria crece exponencialmente.
+  \item \textbf{Búsqueda en profundidad (DFS):} sigue un único camino hasta
+    agotarlo antes de retroceder, utilizando menos memoria que BFS. Sin
+    embargo, no garantiza optimalidad y puede perderse en ramas muy profundas.
+\end{itemize}
+Ambas estrategias requieren un mecanismo para detectar estados repetidos —
+normalmente un conjunto de visitados— que evite la generación de ciclos.
+
+\subsection{Función pagoda}
+
+La función pagoda es una heurística específica para el Senku que asigna un
+peso numérico $p(c)$ a cada casilla $c$ del tablero~\cite{beasley-peg-solitaire}.
+La suma de los pesos de todas las casillas ocupadas en un estado constituye el
+valor pagoda de dicho estado. Para que la función sea admisible como heurística
+debe cumplir la condición de que, para cualquier tripleta de casillas adyacentes
+$(a, b, c)$ —donde $a$ es el origen, $b$ la intermedia y $c$ el destino de un
+salto válido— se verifique que $p(a) + p(b) \geq p(c)$. Esta propiedad asegura
+que el valor de pagoda nunca aumenta tras realizar un movimiento, por lo que es
+monótona decreciente y puede emplearse como cota inferior del esfuerzo restante.
+
+En este trabajo se han implementado tres variantes de asignación de pesos,
+basadas en la paridad de las coordenadas $(x, y)$ de cada casilla en la
+convención de nombrado $cXY$:
+\begin{itemize}
+  \item \textbf{V1:} asigna peso 1 a las casillas con $x$ impar e $y$ impar.
+  \item \textbf{V2:} asigna peso 1 a las casillas con $x$ par e $y$ par.
+  \item \textbf{V3:} asigna peso 1 a las casillas con $x$ par e $y$ impar.
+\end{itemize}
+El resto de casillas reciben peso 0. Cada variante induce una heurística
+distinta que prioriza la eliminación de piezas en determinadas zonas del
+tablero.
+
+\subsection{Algoritmo Beam Search}
+
+La búsqueda en haz (beam search) es una variante de la búsqueda en anchura
+que incorpora una heurística para limitar la expansión del árbol en cada nivel.
+En lugar de conservar todos los nodos de un nivel, el algoritmo mantiene
+únicamente los $W$ nodos más prometedores según la función heurística, donde
+$W$ es un parámetro conocido como \textit{anchura del haz} o
+\textit{beam width}~\cite{russell-norvig}.
+
+El procedimiento general es el siguiente: partiendo del nodo inicial, se
+generan todos sus sucesores y se evalúan con la heurística. Los $W$ sucesores
+con mejor valor pasan a formar la frontera del siguiente nivel. En cada
+iteración se repite el proceso: se expanden todos los nodos de la frontera
+actual, se evalúan todos los sucesores generados y se conservan los $W$
+mejores. Si en algún momento se alcanza un estado que cumple la condición de
+objetivo, el algoritmo termina y devuelve la secuencia de acciones.
+
+Al podar el árbol en cada nivel, beam search consigue mantener un uso de
+memoria acotado y controlable, pero a costa de poder perder la solución si
+esta pasa por estados que no se encuentran entre los $W$ mejores de su nivel.
+La elección del valor de $W$ y de la función heurística es, por tanto,
+determinante para el éxito del algoritmo.
+
+\subsection{Trabajo relacionado}
+
+El Senku ha sido objeto de estudio en la literatura de Inteligencia Artificial
+desde hace décadas. Beasley~\cite{beasley-peg-solitaire} realizó un análisis
+exhaustivo del juego empleando técnicas de búsqueda con función pagoda,
+demostrando que todas las posiciones del tablero inglés estándar pueden
+resolverse con la heurística adecuada. La librería Unified
+Planning~\cite{unified-planning} proporciona una implementación de referencia
+para la manipulación de problemas PDDL en Python, incluyendo un simulador
+fiel para la ejecución de acciones sobre los estados. El presente trabajo se
+apoya en ambas contribuciones para construir un sistema que integre el
+modelado PDDL con algoritmos de búsqueda personalizados.
+
 
 \section{Metodología}
 
-En esta sección se describen los algoritmos implementados para la resolución del Senku. Cada algoritmo se presenta en un subapartado independiente, detallando su funcionamiento, las variantes consideradas y las decisiones de diseño adoptadas para superar las dificultades encontradas durante su implementación.
+\subsection{Modelado del dominio en PDDL}
+
+\subsubsection{Predicados y acción saltar}
+
+El dominio PDDL define tres predicados y una única acción. Los predicados son:
+\texttt{(pieza ?c)}, que indica que una casilla está ocupada;
+\texttt{(vacio ?c)}, que indica que está libre; y \texttt{(adyacente ?c1 ?c2 ?c3)},
+que codifica una tripleta de casillas alineadas en línea recta (horizontal o
+vertical) donde desde \texttt{?c1} se puede saltar sobre \texttt{?c2} para
+aterrizar en \texttt{?c3}.
+
+La acción \texttt{saltar} recibe tres parámetros: la casilla origen (donde se
+encuentra la pieza que salta), la casilla intermedia (sobre la que se salta)
+y la casilla destino (donde se aterriza). Las precondiciones exigen que el
+origen y la intermedia estén ocupados por piezas, que el destino esté vacío
+y que las tres casillas formen una tripleta adyacente válida. Los efectos
+actualizan los tres predicados: origen e intermedia pasan a estar vacíos y
+destino pasa a estar ocupado.
+
+Una decisión de diseño notable es que la relación \texttt{adyacente} se modela
+como un predicado estático que se define explícitamente en el archivo de cada
+problema. Esto evita tener que calcular geometrías dentro del dominio PDDL,
+pero genera una gran cantidad de fluentes estáticos en los problemas —76
+adyacencias en el tablero clásico— que deben ser filtrados durante la
+búsqueda para no degradar el rendimiento. El dominio completo requiere
+únicamente el subconjunto \texttt{:strips} de PDDL.
+
+\subsubsection{Variantes de tablero}
+
+Se han definido cinco problemas PDDL que comparten el mismo dominio:
+\begin{itemize}
+  \item \textbf{Prueba (3 piezas):} tablero reducido de 33 casillas con
+    únicamente tres piezas y treinta huecos. Diseñado para verificar la
+    corrección de los algoritmos en un caso simple.
+  \item \textbf{Tablero clásico:} 33 casillas (32 piezas, 1 hueco central) con
+    la disposición en cruz del Senku inglés tradicional.
+  \item \textbf{Variante 1:} 37 casillas (36 piezas, 1 hueco), que añade
+    cuatro casillas respecto a la clásico en las esquinas cóncavas interiores.
+  \item \textbf{Variante 3:} 39 casillas (38 piezas, 1 hueco), que extiende
+    aún más el tablero incorporando filas adicionales.
+  \item \textbf{Variante 5:} 41 casillas (40 piezas, 1 hueco), la
+    configuración más grande, con una topología irregular.
+\end{itemize}
+En todos los tableros el hueco inicial se encuentra en la casilla central
+(generalmente \texttt{c44}) y el objetivo, en su versión estricta del PDDL, exige que la
+pieza final ocupe esa misma posición. No obstante, en la experimentación se
+ha adoptado un criterio más flexible (\texttt{goal\_anywhere}) que considera
+válido cualquier estado con una única pieza, independientemente de su
+ubicación.
 
 \subsection{Búsqueda básica en espacio de estados}
 
-El primer algoritmo implementado consiste en una exploración sistemática del árbol de juego del Senku mediante búsqueda ciega, es decir, sin emplear ninguna función heurística que guíe la exploración. El problema se modela como un grafo dirigido donde cada nodo representa una configuración del tablero (posición de las piezas y huecos) y cada arista dirigida representa un movimiento válido, esto es, el salto de una pieza sobre otra adyacente hacia un hueco libre.
+\subsubsection{Implementación y optimizaciones}
 
-El algoritmo mantiene dos estructuras de datos fundamentales durante su ejecución. La primera es la \textit{frontera}, una colección que almacena los nodos pendientes de explorar y cuyo orden de extracción determina la estrategia de búsqueda. La segunda es el \textit{conjunto de visitados}, que almacena una representación resumida (mediante una función hash) de todos los estados que ya han sido explorados, evitando así que el algoritmo entre en ciclos infinitos al alcanzar un estado previamente visitado.
+El primer algoritmo implementado consiste en una exploración sistemática del
+árbol de juego que admite dos modos de operación (BFS y DFS). La
+implementación mantiene dos estructuras fundamentales: una frontera que
+almacena los nodos pendientes de explorar y un conjunto de visitados que
+evita ciclos. Cada nodo almacena el propio estado, una referencia al nodo
+padre, la acción que generó el estado y la profundidad en el árbol. Cuando se
+alcanza un nodo objetivo, la secuencia de acciones se reconstruye recorriendo
+las referencias al padre hasta la raíz.
 
-En cada iteración, el algoritmo extrae un nodo de la frontera, genera todos los movimientos válidos desde el estado representado por dicho nodo y, para cada uno, aplica la transición correspondiente para obtener el estado sucesor. Si el estado sucesor no ha sido visitado con anterioridad, se comprueba si cumple la condición de objetivo (una única pieza en el centro del tablero). En caso afirmativo, el algoritmo reconstruye la secuencia de acciones recorriendo hacia atrás las referencias al nodo padre; en caso negativo, el nodo sucesor se añade a la frontera y el original al conjunto de visitados, y el proceso continúa. Si la frontera se vacía sin haber encontrado una solución, el algoritmo concluye que no existe ningún plan de movimientos que alcance el estado objetivo desde la configuración inicial dada.
+Durante el desarrollo se identificaron dos problemas principales de rendimiento
+que requirieron soluciones de diseño específicas:
 
-\subsubsection{Variantes: BFS y DFS}
+\textbf{Generación de movimientos.} La librería Unified Planning proporciona
+un simulador que permite obtener las acciones aplicables en un estado mediante
+\texttt{get\_applicable\_actions}. Sin embargo, esta operación realiza una
+instanciación completa de todas las combinaciones posibles de parámetros, lo
+que para el tablero clásico supone evaluar más de treinta mil combinaciones en
+cada nodo, con un coste de decenas de segundos por llamada. Para resolver este
+problema se optó por extraer las relaciones de adyacencia una única vez al
+inicio de la búsqueda y, a partir de entonces, generar los movimientos válidos
+recorriendo directamente la lista de adyacencias. Para cada tripleta
+$(\text{origen}, \text{intermedia}, \text{destino})$ se comprueba si la
+casilla origen contiene una pieza, la intermedia contiene una pieza y el
+destino está vacío. Esta comprobación se reduce a tres accesos booleanos en
+memoria, reduciendo el coste de generación de movimientos de decenas de
+segundos a microsegundos.
 
-El algoritmo admite dos variantes según la política de extracción de la frontera:
+\textbf{Cálculo del identificador hash.} El conjunto de visitados utiliza
+un \texttt{frozenset} con los fluentes activos como identificador de cada
+estado. Inicialmente se construía este conjunto recorriendo todos los fluentes
+definidos en el problema, incluyendo los del predicado \texttt{adyacente} que
+son estáticos y nunca cambian. Para el tablero clásico, esto suponía procesar
+más de 150 fluentes por estado, la mayoría de ellos invariantes. La
+optimización consistió en filtrar los fluentes al inicio, conservando
+únicamente los correspondientes a los predicados \texttt{pieza} y
+\texttt{vacio} —que son los que realmente cambian durante la partida—, lo que
+reduce los fluentes a evaluar a un máximo de 33 (uno por casilla) y acelera
+significativamente cada comprobación.
 
-\begin{itemize}
-    \item \textbf{Búsqueda en anchura (BFS)}: la frontera se gestiona como una cola FIFO (\textit{first in, first out}). Esta variante garantiza que la primera solución encontrada es la de menor número de movimientos posibles. Sin embargo, su consumo de memoria crece exponencialmente con la profundidad del árbol, lo que la hace inviable para el tablero clásico completo en un ordenador convencional, dado el enorme volumen de estados que deben mantenerse simultáneamente en la frontera.
-    \item \textbf{Búsqueda en profundidad (DFS)}: la frontera se gestiona como una pila LIFO (\textit{last in, first out}). Esta variante requiere menos memoria que BFS, ya que explora un único camino hasta agotarlo antes de retroceder. No obstante, no garantiza encontrar la solución de profundidad mínima y, sin un límite adecuado, puede perderse en ramas muy profundas del árbol sin alcanzar el objetivo.
-\end{itemize}
-
-Para la verificación temprana del correcto funcionamiento de ambas variantes se empleó un tablero reducido de solo tres piezas. Esto permitió depurar la lógica del algoritmo y confirmar que los planes generados eran válidos antes de abordar el tablero clásico completo, cuyo espacio de búsqueda es significativamente mayor.
+Estas optimizaciones permitieron alcanzar una velocidad del orden de cientos
+de nodos por segundo y hacer viable la resolución completa del tablero
+clásico.
 
 \subsubsection{Pseudocódigo}
 
-A continuación se presenta el pseudocódigo unificado del algoritmo de búsqueda básica. Presentamos antes algunas aclaraciones para facilitar la comprensión del pseudocódigo que define el algoritmo. La función \texttt{elegir\_nodo} determina la variante: si se trata de BFS, extrae el primer elemento de la frontera (FIFO); si se trata de DFS, extrae el último (LIFO). La función \texttt{generar\_movimientos} obtiene todos los saltos válidos desde el estado actual comprobando, para cada tripleta de casillas adyacentes, que la casilla origen contiene una pieza, la casilla intermedia contiene una pieza y la casilla destino está vacía. La función \texttt{aplicar} ejecuta la transición y produce el nuevo estado. La función \texttt{hash} construye un identificador inmutable del estado considerando únicamente aquellas casillas ocupadas por una pieza, lo que permite la detección eficiente de estados repetidos.
+La figura~\ref{pcd:basica} presenta el pseudocódigo del algoritmo de búsqueda
+básica. La función \texttt{elegirNodo} determina la estrategia: en BFS extrae
+el primer elemento de la frontera (comportamiento FIFO), mientras que en DFS
+extrae el último (comportamiento LIFO). La función \texttt{generarMovimientos}
+recorre las adyacencias precomputadas comprobando las condiciones de pieza y
+hueco en cada tripleta. La función \texttt{hash} construye el identificador
+inmutable del estado a partir de los fluentes activos.
 
-\begin{figure}
+\begin{figure*}
+  \small
   \begin{pseudo}*
     \hd{\fn{busquedaBasica}}(estadoInicial, usarBFS) \\*
-    \multicolumn{2}{l}{\textbf{Entrada}: \textnormal{estado inicial del tablero, modo de búsqueda}} \\*
-    \multicolumn{2}{l}{\textbf{Salida}: plan de acciones o indicador de fracaso} \\
+    \multicolumn{2}{l}{\textbf{Entrada}: estado inicial, modo de búsqueda} \\*
+    \multicolumn{2}{l}{\textbf{Salida}: plan de acciones o \textbf{None}} \\
     frontera $\leftarrow$ [\pr{nodo}(estadoInicial)] \\
     visitados $\leftarrow$ \{ \pr{hash}(estadoInicial) \} \\
-    \textbf{mientras} frontera \textnormal{no esté vacía} \textbf{hacer} \\+
-        nodo $\leftarrow$ \pr{elegirNodo}(frontera, usarBFS) \\
-        acciones $\leftarrow$ \pr{generarMovimientos}(nodo.estado) \\
-        \textbf{para cada} \textnormal{acción} \textbf{en} \textnormal{acciones} \textbf{hacer} \\+
-            sucesor $\leftarrow$ \pr{aplicar}(\textnormal{acción}, nodo.estado) \\
-            \textbf{si} \pr{hash}(sucesor) $\notin$ visitados \textbf{entonces} \\+
-                \textbf{si} \pr{esObjetivo}(sucesor) \textbf{entonces} \\+
-                    \textbf{devolver} \pr{reconstruirPlan}(sucesor) \\-
-                visitados $\leftarrow$ visitados $\cup$ \{ \pr{hash}(sucesor) \} \\
-                frontera $\leftarrow$ frontera $\cup$ [\pr{nodo}(sucesor, nodo, \textnormal{acción})] \\-
-            \textbf{fin si} \\-
-        \textbf{fin para} \\-
+    \textbf{mientras} frontera $\neq \varnothing$ \textbf{hacer} \\+
+      nodo $\leftarrow$ \pr{elegirNodo}(frontera, usarBFS) \\
+      acciones $\leftarrow$ \pr{generarMovimientos}(nodo.estado) \\
+      \textbf{para cada} acc \textnormal{\textbf{en}} acciones \textbf{hacer} \\+
+        sucesor $\leftarrow$ \pr{aplicar}(acc, nodo.estado) \\
+        \textbf{si} \pr{hash}(sucesor) $\notin$ visitados \textbf{entonces} \\+
+          \textbf{si} \pr{esObjetivo}(sucesor) \textbf{entonces} \\+
+            \textbf{devolver} \pr{reconstruirPlan}(sucesor) \\-
+          visitados $\leftarrow$ visitados $\cup$ \{ \pr{hash}(sucesor) \} \\
+          frontera $\leftarrow$ frontera $\cup$ [\pr{nodo}(sucesor, nodo, acc)] \\-
+        \textbf{fin si} \\-
+      \textbf{fin para} \\-
     \textbf{fin mientras} \\
-    \textbf{devolver} \textnormal{fracaso}
+    \textbf{devolver} None
   \end{pseudo}
-  \caption{Algoritmo de búsqueda básica en espacio de estados (BFS/DFS)}
+  \caption{Algoritmo de búsqueda básica (BFS/DFS) para el Senku}
   \label{pcd:basica}
-\end{figure}
+\end{figure*}
 
-\subsubsection{Dificultades encontradas y decisiones de diseño}
+\subsection{Búsqueda en haz (Beam Search)}
 
-La principal dificultad encontrada durante la implementación de este algoritmo fue el rendimiento, motivado por la enorme dimensión del espacio de estados del Senku clásico. A continuación se detallan los problemas específicos y las soluciones adoptadas.
+\subsubsection{Adaptación al Senku}
 
-El primer problema identificado fue la generación de los movimientos aplicables desde un estado. La librería Unified Planning proporciona un simulador que, para cada estado, recalca todas las posibles instanciaciones de la acción \texttt{saltar} combinando todos los objetos del dominio, lo que resulta en un proceso de grounded intensivo. Para el tablero clásico, con 33 casillas, esto supone evaluar más de treinta mil combinaciones de parámetros en cada nodo, con un coste temporal del orden de decenas de segundos por operación, lo cual es inasumible para una búsqueda que debe explorar millones de nodos. La solución consistió en extraer las relaciones de adyacencia del problema una única vez al inicio de la búsqueda y, a partir de entonces, generar los movimientos válidos comprobando directamente sobre cada tripleta de casillas adyacentes si se cumplen las precondiciones de la acción. Esta comprobación se reduce a verificar tres condiciones booleanas en memoria, reduciendo el coste drásticamente y haciendo viable la exploración.
+La implementación de la búsqueda en haz reutiliza directamente las
+optimizaciones desarrolladas para la búsqueda básica —generación de
+movimientos mediante adyacencias precomputadas, filtrado de fluentes
+relevantes y cálculo eficiente de hash—, por lo que no se reprodujeron los
+problemas de rendimiento que sí aparecieron en aquella. La estructura del
+algoritmo es similar, pero en lugar de conservar todos los sucesores de un
+nivel, los ordena según la heurística pagoda y retiene únicamente los $W$
+mejores.
 
-El segundo problema derivaba del cálculo del identificador hash de cada estado para el conjunto de visitados. Inicialmente, el hash se construía recorriendo todos los fluentes definidos en el estado inicial del problema PDDL. Sin embargo, el predicado \texttt{adyacente} genera miles de fluentes estáticos (que nunca cambian durante la partida) y que son innecesarios para distinguir un estado de otro. La solución fue filtrar estos fluentes, considerando únicamente aquellos correspondientes a los predicados \texttt{pieza} y \texttt{vacio}, que son los únicos que varían con cada movimiento. Esto redujo el número de fluentes a evaluar por hash en más de un 99\%, acelerando significativamente cada llamada.
+La función principal recibe como parámetros la instancia del problema, la
+anchura del haz $W$, la variante de pagoda a emplear, y un indicador
+\texttt{goal\_anywhere} que, cuando está activo, considera como objetivo
+cualquier estado con una única pieza (en lugar de la posición concreta
+definida en el PDDL).
 
-Estas optimizaciones permitieron que el algoritmo completase la exploración a una velocidad del orden de varios cientos de nodos por segundo, haciendo factible la resolución del tablero clásico en un tiempo del orden de horas. No obstante, queda patente que una búsqueda puramente ciega, sin información heurística que guíe la exploración hacia los estados más prometedores, tiene dificultades para escalar a problemas de gran tamaño. Esta limitación motiva la incorporación de técnicas de búsqueda informada que se describen en las siguientes secciones.
+Un problema específico que surgió durante el desarrollo fue la falta de
+discriminación de la heurística pagoda simple cuando muchos estados en un mismo
+nivel comparten el mismo valor. La pagoda V1 tiene únicamente 12 valores
+posibles distintos (tantos como casillas con peso 1 en el tablero clásico), por
+lo que dentro de cada nivel los nodos se ordenan esencialmente de forma
+arbitraria entre aquellos con el mismo valor pagoda. Esto provocaba que, en
+tableros grandes, el haz perdiera el camino correcto en niveles profundos.
 
-\section{Descripción del módulo src/pddl\_reader.py}
+La solución adoptada fue introducir criterios de desempate mediante pagoda
+dual y triple. Cuando se proporciona una pagoda secundaria, la ordenación de
+los sucesores utiliza una tupla $(H_1, H_2)$ donde $H_1$ es el valor de la
+pagoda primaria y $H_2$ el de la secundaria. Esto aumenta el número de bins
+de ordenación de aproximadamente 12 a más de 144 combinaciones. Para los
+casos más exigentes se implementó la ordenación triple $(H_1, H_2, H_3)$,
+elevando el número de bins a más de 1.700. Esta extensión permitió resolver
+tableros que con la pagoda simple eran intratables.
 
-\subsection{Propósito}
-El módulo \texttt{src/pddl\_reader.py} proporciona utilidades para cargar un dominio y un problema PDDL usando la librería \texttt{unified\_planning}, extraer los fluentes iniciales activos y calcular una función de evaluación simple (denominada "función pagoda") sobre un estado dado. Está pensado como una pieza de integración entre los ficheros PDDL en el directorio \texttt{PDDL/} y los algoritmos de búsqueda implementados en \texttt{src/}.
+\subsubsection{Pseudocódigo}
 
-\subsection{Estructura y API principal}
-El módulo define la clase \texttt{SenkuPDDLReader} con la siguiente interfaz relevante:
+El pseudocódigo del algoritmo de búsqueda en haz se muestra en la
+figura~\ref{pcd:beam}. La función \texttt{ordenarPorPagoda} admite tanto una
+variante simple como una lista de variantes. La poda del haz se realiza
+mediante la selección de los primeros $W$ elementos tras la ordenación.
 
-\begin{itemize}
-    \item \textbf{\_\_init\_\_}(domain\_path, problem\_path): almacena las rutas del dominio y del problema.
-    \item \textbf{read\_problem()}: utiliza \texttt{PDDLReader.parse\_problem} para parsear y cargar el problema PDDL en memoria, guardándolo en \texttt{self.problem}.
-    \item \textbf{cargar\_fluentes()}: devuelve un diccionario con los fluentes del estado inicial cuyo valor es verdadero. Internamente usa \texttt{self.problem.initial\_values}.
-    \item \textbf{obtener\_acciones\_aplicables()}: devuelve la colección de acciones del problema (\texttt{self.problem.actions}).
-    \item \textbf{funcion\_pagoda(fluentes\_activos, variante)}: calcula una suma entera según una asignación binaria de casillas (tres variantes implementadas). Permite evaluar estados con una heurística muy simple usada para experimentación.
-\end{itemize}
+\begin{figure*}
+  \small
+  \begin{pseudo}*
+    \hd{\fn{busquedaHaz}}(estadoInicial, W, variantesPagoda) \\*
+    \multicolumn{2}{l}{\textbf{Entrada}: estado inicial, anchura del haz,
+      lista de variantes pagoda} \\*
+    \multicolumn{2}{l}{\textbf{Salida}: plan de acciones o \textbf{None}} \\
+    frontera $\leftarrow$ [\pr{nodo}(estadoInicial)] \\
+    visitados $\leftarrow$ \{ \pr{hash}(estadoInicial) \} \\
+    \textbf{mientras} frontera $\neq \varnothing$ \textbf{hacer} \\+
+      sucesores $\leftarrow$ [] \\
+      \textbf{para cada} nodo \textnormal{\textbf{en}} frontera \textbf{hacer} \\+
+        acciones $\leftarrow$ \pr{generarMovimientos}(nodo.estado) \\
+        \textbf{para cada} acc \textnormal{\textbf{en}} acciones \textbf{hacer} \\+
+          sucesor $\leftarrow$ \pr{aplicar}(acc, nodo.estado) \\
+          \textbf{si} \pr{hash}(sucesor) $\notin$ visitados \textbf{entonces} \\+
+            \textbf{si} \pr{esObjetivo}(sucesor) \textbf{entonces} \\+
+              \textbf{devolver} \pr{reconstruirPlan}(sucesor) \\-
+            visitados $\leftarrow$ visitados $\cup$ \{ \pr{hash}(sucesor) \} \\
+            sucesores $\leftarrow$ sucesores $\cup$ [\pr{nodo}(sucesor, nodo, acc)] \\-
+          \textbf{fin si} \\-
+        \textbf{fin para} \\-
+      \textbf{fin para} \\
+      \pr{ordenarPorPagoda}(sucesores, variantesPagoda) \\
+      frontera $\leftarrow$ sucesores[:W] \\-
+    \textbf{fin mientras} \\
+    \textbf{devolver} None
+  \end{pseudo}
+  \caption{Algoritmo de búsqueda en haz (Beam Search)}
+  \label{pcd:beam}
+\end{figure*}
 
-Además hay métodos auxiliares internos:
-\begin{itemize}
-    \item \textbf{\_extraer\_coordenadas(fluente)}: normaliza la representación de un fluente de pieza aceptando tanto objetos fluente devueltos por Unified Planning como cadenas del tipo \texttt{pieza(c31)}. Devuelve el identificador de casilla (por ejemplo \texttt{c31}) o \texttt{None} si no aplica.
-\end{itemize}
 
-\subsection{Decisiones de diseño importantes}
-\begin{itemize}
-    \item \textbf{Integración con Unified Planning}: el módulo delega el parseo completo del PDDL en \texttt{unified\_planning.io.PDDLReader}. Esto simplifica el código y garantiza compatibilidad con la API de UP, a costa de depender de su representación interna de fluentes y acciones.
-    \item \textbf{Representación flexible de fluentes}: \texttt{\_extraer\_coordenadas} admite tanto objetos fluente como cadenas, lo que facilita reutilizar la función con distintas partes del proyecto (por ejemplo, al comparar valores guardados en estructuras propias frente a la salida directa de UP).
-    \item \textbf{Función pagoda ligera}: se implementaron tres variantes sencillas de la función pagoda como heurísticas experimentales. Las variantes están basadas en patrones sobre índices de casilla (par/impar) y son rápidas de calcular.
-    \item \textbf{Simplicidad y legibilidad}: el módulo prioriza claridad sobre microoptimización; operaciones de carga y cálculo se mantienen explícitas para facilitar la inspección durante la experimentación.
-\end{itemize}
+\section{Experimentación y resultados}
 
-\subsection{Limitaciones y observaciones}
-\begin{itemize}
-    \item \textbf{Formato de casilla asumido}: \texttt{funcion\_pagoda} asume identificadores de casilla de longitud 3 que comienzan por \texttt{c} y continúan con dos dígitos únicos (por ejemplo \texttt{c31}). Esto falla para índices con más de una cifra por coordenada y debería refactorizarse si se usan tableros con dimensiones mayores o distintas convenciones de nombrado.
-    \item \textbf{Ausencia de manejo de errores robusto}: el módulo captura excepciones en el bloque \texttt{if __name__ == "__main__"} sólo para imprimir errores; sería recomendable añadir validaciones y mensajes más informativos al integrarlo en herramientas automatizadas.
-    \item \textbf{Rendimiento}: la lectura del problema es delegada a Unified Planning; para cargas repetidas grandes podría convenir cachear el resultado de \texttt{read\_problem} o parsear selectivamente los fluentes necesarios.
-\end{itemize}
+\subsection{Configuración experimental}
 
-\subsection{Mejoras sugeridas}
-\begin{itemize}
-    \item Soportar identificadores de casilla genéricos usando expresiones regulares en \texttt{\_extraer\_coordenadas} para admitir índices multi-dígito.
-    \item Añadir funciones utilitarias que extraigan la lista de casillas y relaciones de adyacencia desde \texttt{self.problem} para evitar recalcular adyacencias desde las acciones a lo largo de la búsqueda.
-    \item Incorporar pruebas unitarias que verifiquen la correcta conversión de fluentes y el cálculo de la \textit{pagoda} para distintas variantes y tamaños de tablero.
-\end{itemize}
+Todos los experimentos se han ejecutado sobre un mismo equipo con procesador
+AMD Ryzen 7 y 32~GB de RAM, utilizando Python 3.12 y la librería
+Unified Planning 4. Las métricas registradas para cada ejecución han sido:
+número de nodos expandidos, profundidad de la solución (en número de saltos),
+tiempo de ejecución y resultado (éxito o fracaso). Para la búsqueda en haz se
+ha empleado la modalidad \texttt{goal\_anywhere}, que acepta como objetivo
+cualquier estado con una única pieza.
 
-\section{Descripción de los ficheros en el directorio PDDL}
+\subsection{Verificación con búsqueda básica}
 
-En el directorio \texttt{PDDL/} se almacenan el dominio común del juego y varios problemas (configuraciones de tablero). A continuación se describe el contenido y las decisiones de diseño principales de cada fichero.
+La búsqueda básica se verificó en primer lugar sobre el tablero de prueba de
+3 piezas, confirmando que tanto BFS como DFS encuentran la solución óptima
+con 2 movimientos y expandiendo únicamente 3 nodos (BFS) o 2 nodos (DFS).
 
-\subsection{\texttt{dominio\_senku.pddl}}
-Fichero que define el dominio PDDL del juego Senku. Contiene:
-\begin{itemize}
-    \item Predicados: \texttt{(pieza ?c)} para casillas ocupadas, \texttt{(vacio ?c)} para casillas libres y \texttt{(adyacente ?c1 ?c2 ?c3)} para tripletas alineadas que representan un salto válido.
-    \item Requerimientos: usa \texttt{:strips}, por tanto las acciones se expresan con precondiciones y efectos clásicos.
-    \item Acción \texttt{saltar}: parámetros \texttt{?origen ?intermedia ?destino}, precondiciones que exigen la pieza origen, la pieza intermedia y destino vacío, además de la relación \texttt{adyacente}. Los efectos actualizan los predicados \texttt{pieza} y \texttt{vacio} apropiadamente.
-\end{itemize}
+Posteriormente se ejecutó DFS sobre el tablero clásico completo sin límite de
+profundidad. Dado que BFS resulta inviable en este tablero por su consumo
+explosivo de memoria, se optó por DFS, que requiere mantener solo una rama
+del árbol en la frontera. La búsqueda exploró 1.929.901 nodos durante
+aproximadamente 90~minutos y encontró una solución de 31 saltos. Este
+resultado, aunque positivo, evidencia la necesidad de una heurística que guíe
+la búsqueda hacia estados más prometedores para hacer el proceso práctico.
 
-Diseño notable: la relación \texttt{adyacente} se modela como predicado estático que encadena tres casillas formando una línea de salto; esto evita cálculos geométricos dentro del dominio PDDL pero genera muchos fluentes estáticos en los problemas.
+Los valores de la función pagoda para el estado inicial de cada tablero se
+recogen en la tabla~\ref{tab:pagoda}. Sirvieron como referencia para calibrar
+la heurística: un valor pagoda alto indica una configuración de piezas más
+desfavorable desde el punto de vista de esa variante concreta.
 
-\subsection{\texttt{problema\_senku\_prueba.pddl}}
-Un problema de prueba con un tablero reducido y sólo tres piezas en posiciones concretas. Contiene:
-\begin{itemize}
-    \item Declaración de objetos: lista de identificadores de casilla con convención \texttt{cXY}.
-    \item \texttt{(:init)}: todas las relaciones \texttt{adyacente} necesarias (horizontales y verticales) y un estado inicial reducido donde sólo unas pocas casillas contienen \texttt{pieza} y el resto son \texttt{vacio} según la configuración de prueba.
-    \item \texttt{(:goal)}: estado objetivo específico (se indica una disposición final con una pieza en el centro del tablero de prueba).
-\end{itemize}
+\begin{table}
+  \caption{Valores pagoda del estado inicial por tablero y variante}
+  \label{tab:pagoda}
+  \centering
+  \begin{tabular}{lccc}
+    \toprule
+    Tablero & V1 & V2 & V3 \\
+    \midrule
+    Clásico (33) & 12 & 4 & 8 \\
+    Variante 1 (37) & 12 & 9 & 7 \\
+    Variante 3 (39) & 12 & 6 & 10 \\
+    Variante 5 (41) & 12 & 12 & 8 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
-Uso: sirve para depurar la lógica del dominio y los algoritmos de búsqueda en un caso pequeño y controlado.
+\subsection{Resultados de Beam Search}
 
-\subsection{\texttt{problema\_senku\_tablero\_clasico.pddl}}
-Problema que modela el tablero clásico de Senku. Estructura similar a la del fichero de prueba pero con el estado inicial completo del tablero clásico (todas las casillas ocupadas salvo el centro) y la definición exhaustiva de \texttt{adyacente} para el tamaño clásico.
+La experimentación con beam search se realizó buscando la combinación óptima
+de variante(s) de pagoda y anchura de haz para cada tablero. La estrategia
+consistió en probar las variantes V1, V2 y V3 como pagoda primaria, y
+combinarlas con pagodas secundarias (y terciaria) cuando la simple resultaba
+insuficiente.
 
-Peculiaridad: el estado inicial coloca \texttt{vacio c44} para representar el hueco central; el objetivo exige dejar una única pieza en la posición central (`c44`).
+\subsubsection{Tablero clásico (33 casillas)}
 
-\subsection{\texttt{problema\_senku\_tablero\_variante1.pddl}}
-Variante del tablero con una geometría ligeramente distinta (añade filas/columnas adicionales y casillas intermedias como \texttt{c22}, \texttt{c62}, \texttt{c66}, ...). Contiene su propia lista de objetos, relaciones \texttt{adyacente} adaptadas y un estado inicial/objetivo acordes a la forma de la variante.
+Con la pagoda V1 como único criterio de ordenación y una anchura de haz
+$W=500$, el algoritmo encuentra una solución de 31 saltos tras expandir
+11.667 nodos en 44~s. Durante los primeros niveles el haz se satura
+rápidamente (500 nodos por nivel desde el nivel 5), para comenzar a reducirse
+a partir del nivel 26 hasta alcanzar el objetivo en el nivel 31.
 
-Propósito: evaluar el comportamiento del motor de búsqueda frente a tableros no estándar y comprobar la generalidad del modelado basado en \texttt{adyacente} y la convención \texttt{cXY}.
+La tabla~\ref{tab:resumen} resume los resultados de todos los tableros. La
+solución encontrada para el clásico requiere 31 movimientos, comenzando con
+un salto que desplaza la pieza de la fila superior hacia el hueco central,
+y concluye con la eliminación de las últimas piezas en la zona central del
+tablero.
 
-\subsection{\texttt{problema\_senku\_tablero\_variante3.pddl}}
-Variante más grande que extiende filas hasta índices terminados en \texttt{3..8} introduciendo casillas como \texttt{c83}, \texttt{c84}, etc. Mantiene la misma estructura: objetos, muchas relaciones \texttt{adyacente}, estado inicial con casi todas las casillas ocupadas salvo un hueco central (\texttt{vacio c44}) y objetivo consistente con el centro ocupado.
+\subsubsection{Variante 1 (37 casillas)}
 
-Uso experimental: probar escalabilidad y comprobar que el código acepta dimensiones mayores sin cambios en el dominio.
+La pagoda V1 como único criterio resultó insuficiente para guiar la búsqueda
+en este tablero de mayor tamaño. Fue necesario emplear una pagoda secundaria
+V3 como criterio de desempate, formando la combinación V1+V3, y aumentar la
+anchura del haz a $W=1000$. Con esta configuración se encontró una solución
+de 35 saltos tras expandir 26.763 nodos en 138~s.
 
-\subsection{\texttt{problema\_senku\_tablero\_variante5.pddl}}
-Variante irregular y más amplia que utiliza identificadores hasta dos dígitos en la segunda componente (por ejemplo \texttt{c95}) y una topología no rectangular regular. Incluye muchas relaciones \texttt{adyacente} y define un estado inicial y objetivo particular (en este caso, el objetivo mantiene una pieza en una casilla central distinta, e.g., \texttt{pieza c55}).
+La elección de V3 como secundaria (y no la V2, que es la que se asigna por
+defecto de forma automática) se determinó experimentalmente: la combinación
+V1+V2 no conseguía mantener el haz lo suficientemente diversificado en los
+niveles intermedios, mientras que V1+V3 proporcionaba una mejor
+discriminación.
 
-Notas sobre las variantes:
-\begin{itemize}
-    \item Todas las instancias comparten el mismo \texttt{dominio\_senku.pddl}, lo que facilita reusar el motor de planificación.
-    \item La convención de nombres \texttt{cXY} es consistente en los ficheros, pero algunas variantes usan índices con más de una cifra por coordenada; esto obliga a que cualquier código que extraiga coordenadas (p. ej. \texttt{\_extraer\_coordenadas} en \texttt{src/pddl\_reader.py}) sea robusto frente a identificadores de longitud variable.
-    \item El uso intensivo de \texttt{adyacente} genera muchos fluentes estáticos; en soluciones de búsqueda se recomienda filtrar estos fluentes para acelerar el cálculo de hashes y de movimientos aplicables.
-\end{itemize}
+\subsubsection{Variante 3 (39 casillas)}
 
-\section{Descripción del módulo src/beam\_search.py}
+La variante 3 supuso un desafío mayor. Con pagoda simple V3 y $W=1500$,
+la búsqueda alcanzaba una profundidad de 34 niveles y se colapsaba a un único
+nodo sin poder progresar, debido a la falta de diversidad en la frontera. La
+solución fue emplear V3 como pagoda primaria y V1 como secundaria
+(combinación V3+V1), con $W=1500$. Esto permitió que el haz mantuviera
+suficientes nodos en los niveles críticos (entre $d=30$ y $d=36$ se pasa de
+1500 nodos a 3) y se encontró una solución de 37 saltos tras expandir 42.194
+nodos en 204~s.
 
-\subsection{Propósito}
-El módulo \texttt{src/beam\_search.py} implementa la variante de Búsqueda en Haz (Beam Search) adaptada al problema Senku. Proporciona la función principal \texttt{busqueda\_haz(problema, tamano\_haz, max\_profundidad)} que, dada una instancia de problema cargada por \texttt{unified\_planning}, explora los estados por niveles manteniendo únicamente los mejores \texttt{W} sucesores según una heurística ligera.
+\subsubsection{Variante 5 (41 casillas)}
 
-\subsection{Componentes principales}
-\begin{itemize}
-    \item \textbf{Heurística:} \texttt{heuristica\_senku(estado, cached\_keys)} utiliza la \textit{función pagoda} definida en \texttt{src/pddl\_reader.py} para asignar un valor a un estado (suma de pesos sobre casillas ocupadas). La implementación actual crea un objeto \texttt{SenkuPDDLReader} y llama a \texttt{funcion\_pagoda} con \texttt{variante=1}.
-    \item \textbf{Función principal:} \texttt{busqueda\_haz} realiza las siguientes tareas:
-        \begin{itemize}
-            \item Filtra los fluentes relevantes y extrae las adyacencias usando utilidades de \texttt{src/basic\_search}.
-            \item Usa \texttt{SequentialSimulator} de \texttt{unified\_planning} para generar estados sucesores aplicando la acción \texttt{saltar}.
-            \item Mantiene un conjunto \texttt{visitados} con hashes (\texttt{hash\_estado}) para evitar ciclos.
-            \item En cada nivel genera todos los sucesores, los ordena por heurística y conserva los primeros \texttt{tamano\_haz} para formar la frontera del siguiente nivel.
-        \end{itemize}
-    \item \textbf{Integración:} El módulo depende de \texttt{Nodo}, \texttt{_generar\_movimientos}, \texttt{_extraer\_adyacencias}, \texttt{_filtrar\_fluentes\_relevantes} y \texttt{hash\_estado} definidos en \texttt{src/basic\_search.py}.
-\end{itemize}
+La variante 5, con 41 casillas, resultó ser la más compleja. Se probaron
+todas las combinaciones de pagoda simple (V1, V2, V3 por separado), dual
+(V1+V2, V1+V3, V2+V3) y triple (V1+V2+V3), con anchuras de haz entre 500 y
+3000. En todos los casos la búsqueda alcanza la profundidad 36 (de los 39
+movimientos que requiere teóricamente una solución), donde sobreviven entre
+33~y~42 nodos con exactamente 4 piezas cada uno y ningún movimiento válido
+disponible.
 
-\subsection{Decisiones de diseño}
-\begin{itemize}
-    \item \textbf{Simulación fiel a UP:} el uso de \texttt{SequentialSimulator} garantiza que la aplicación de acciones respeta la semántica del problema PDDL y evita reimplementar la dinámica.
-    \item \textbf{Heurística basada en pagoda:} se reutiliza la función pagoda como medida rápida de calidad de estado; se opta por variantes sencillas para mantener el coste heurístico bajo.
-    \item \textbf{Selección por nivel (beam):} ordenar los sucesores por heurística y truncarlos a \texttt{W} es una forma estándar de limitar la expansión en nodos.
-\end{itemize}
+La configuración más exigente probada fue V1+V2+V3 con $W=3000$, que expandió
+86.928 nodos en 598~s y alcanzó la profundidad 36, pero no pudo progresar más
+allá. Este comportamiento sugiere una limitación fundamental de la heurística
+basada en paridad: las asignaciones de peso 0/1 no proporcionan suficiente
+información para discriminar estados en un tablero de 41 casillas con la
+geometría irregular de esta variante.
 
-\subsection{Limitaciones observadas}
-\begin{itemize}
-    \item \textbf{Creación repetida de lector PDDL:} \texttt{heuristica\_senku} instancia un \texttt{SenkuPDDLReader} en cada llamada, lo que es innecesario si sólo se usa \texttt{funcion\_pagoda}; conviene reutilizar una instancia o extraer la función pagoda estática.
-    \item \textbf{Heurística débil:} la pagoda implementada es muy simple y puede no distinguir bien estados cercanos al objetivo, provocando pérdidas de soluciones si \texttt{tamano\_haz} es pequeño.
-    \item \textbf{Gestión de parámetros de acción:} el código detecta diferentes formatos de acciones (objetos con atributo \texttt{action} o tuplas), lo que añade fragilidad ante cambios en la API de generación de movimientos.
-    \item \textbf{Ausencia de control de tiempo/límite de nodos:} no existe timeout ni límite en número total de nodos expandidos (salvo profundidad), lo que puede bloquear búsquedas largas.
-\end{itemize}
+\subsection{Análisis global}
 
-\subsection{Mejoras sugeridas}
-\begin{itemize}
-    \item Reutilizar una sola instancia de \texttt{SenkuPDDLReader} o extraer \texttt{funcion\_pagoda} a una utilidad pura para evitar sobrecoste en la heurística.
-    \item Permitir pasar una heurística por parámetro a \texttt{busqueda\_haz} (por ejemplo una función que reciba \texttt{estado} y \texttt{cached\_keys}).
-    \item Añadir memoización de heurística y un mecanismo de timeout/contador máximo de nodos.
-    \item Mejorar la selección de sucesores usando estructuras más eficientes (p. ej. heap parcial) cuando el número de sucesores es grande en comparación con \texttt{tamano\_haz}.
-    \item Documentar y estandarizar el formato de las acciones generadas por \texttt{_generar\_movimientos} para evitar múltiples ramas de código al extraer \texttt{act} y \texttt{params}.
-\end{itemize}
+\begin{table}
+  \caption{Resultados completos de beam search}
+  \label{tab:resumen}
+  \centering
+  \begin{tabular}{lcccc}
+    \toprule
+    Tablero & Nodos & Pasos & Tiempo & Pagoda(s) \\
+    \midrule
+    Clásico (33)    & 11.667  & 31 & 44~s   & V1 \\
+    Variante 1 (37) & 26.763  & 35 & 138~s  & V1+V3 \\
+    Variante 3 (39) & 42.194  & 37 & 204~s  & V3+V1 \\
+    Variante 5 (41) & 86.928  & -- & 598~s & V1+V2+V3 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
-\subsection{Ejemplo de uso}
-Un uso mínimo desde Python sería:
-\begin{verbatim}
-from unified_planning.io import PDDLReader
-from src.beam_search import busqueda_haz
+La tabla~\ref{tab:resumen} presenta los resultados globales. Se observa una
+correlación directa entre el número de casillas del tablero y la dificultad
+de resolución: a mayor número de casillas, mayor es el número de nodos
+expandidos y el tiempo requerido. La excepción es la variante~5, que no pudo
+resolverse a pesar de haber empleado la configuración más potente (triple
+pagoda y $W=3000$).
 
-reader = PDDLReader()
-problema = reader.parse_problem('PDDL/dominio_senku.pddl', 'PDDL/problema_senku_tablero_clasico.pddl')
-plan = busqueda_haz(problema, tamano_haz=100, max_profundidad=50)
-print(plan)
-\end{verbatim}
+En términos de eficacia, el algoritmo resuelve 3 de los 4 tableros
+propuestos para la evaluación (clásico, variante~1 y variante~3), con tiempos
+que oscilan entre 44 segundos y algo más de 3 minutos. La profundidad de las
+soluciones encontradas aumenta con el tamaño del tablero: 31 pasos para el
+clásico (33 casillas), 35 para la variante~1 (37) y 37 para la variante~3
+(39).
+
+La principal limitación observada es que el haz se satura en los niveles
+tempranos (entre 5~y~10, dependiendo del tablero), alcanzando el máximo de
+$W$ nodos en todos los niveles intermedios. Esto significa que la poda es
+muy agresiva y que la diversidad de la frontera depende críticamente de la
+capacidad de la heurística para diferenciar estados dentro del mismo nivel.
+La incorporación de pagoda dual y triple como criterio de ordenación mejoró
+significativamente esta diversidad, pero no fue suficiente para el tablero
+más grande.
+
+En términos de coste computacional, la tabla~\ref{tab:comparativa} compara
+directamente ambas estrategias sobre el tablero clásico. La búsqueda básica
+(DFS) expandió 1.929.901 nodos en aproximadamente 90~minutos, mientras que
+beam search con pagoda V1 resolvió el mismo tablero expandiendo tan solo
+11.667 nodos en 44~s —una reducción de dos órdenes de magnitud tanto en
+nodos expandidos como en tiempo—, lo que demuestra la efectividad de la
+heurística pagoda para guiar la búsqueda. Ambos algoritmos encontraron
+soluciones de la misma profundidad (31 saltos), si bien no necesariamente
+la misma secuencia de movimientos.
+
+\begin{table}
+  \caption{Comparativa entre búsqueda básica y beam search sobre el tablero
+           clásico}
+  \label{tab:comparativa}
+  \centering
+  \begin{tabular}{lcc}
+    \toprule
+    & DFS & Beam Search (V1) \\
+    \midrule
+    Nodos expandidos & 1.929.901 & 11.667 \\
+    Profundidad (pasos) & 31 & 31 \\
+    Tiempo & 5.429~s & 44~s \\
+    Anchura de haz & --- & 500 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+
+\section{Conclusiones}
+
+En este trabajo se ha desarrollado un sistema completo de planificación
+automática para el juego del Senku, cubriendo todas las fases del proceso:
+modelado del dominio en PDDL, implementación de algoritmos de búsqueda no
+informada (BFS/DFS) e informada (beam search con heurística pagoda), y
+experimentación sobre cinco configuraciones de tablero con diferente número
+de casillas.
+
+La principal conclusión del trabajo es que la combinación de una
+representación PDDL optimizada con un algoritmo de búsqueda en haz guiado
+por función pagoda permite resolver el Senku clásico y sus variantes de
+hasta 39 casillas en tiempos prácticos. La incorporación del criterio de
+desempate mediante pagoda dual (y triple) como clave de ordenación de los
+sucesores en cada nivel ha sido la innovación más relevante, ya que ha
+permitido resolver la variante~3 y la variante~1, tableros que con pagoda
+simple resultaban intratables.
+
+Los resultados obtenidos ponen de manifiesto la importancia crítica de las
+heurísticas en problemas de búsqueda con espacios de estado de gran tamaño.
+Mientras que la búsqueda ciega DFS requiere casi dos millones de expansiones
+y más de hora y media para resolver el tablero clásico, la incorporación de
+una heurística tan sencilla como la función pagoda reduce el esfuerzo a poco
+más de diez mil nodos y menos de un minuto. Esta diferencia evidencia que
+es más importante una buena optimización que unos buenos recursos: sin
+información que guíe la exploración, incluso problemas relativamente
+pequeños como el Senku pueden resultar intratables en la práctica.
+
+El análisis cualitativo revela que la función pagoda basada exclusivamente
+en la paridad de coordenadas, si bien es computacionalmente muy ligera,
+presenta un poder de discriminación limitado que se manifiesta
+especialmente en tableros de geometría irregular y mayor número de casillas.
+La variante~5 no pudo resolverse con ninguna combinación probada, lo que
+sugiere que la heurística carece de la granularidad necesaria para
+distinguir estados prometedores de no prometedores en tableros de 41
+casillas. Una función pagoda con más variantes de peso, o una heurística
+distinta que incorporara información topológica, podría superar esta
+limitación.
+
+Como trabajo futuro cabría explorar el uso de pagodas con asignaciones de
+peso más refinadas —incluyendo pesos mayores que 1 y valores no enteros—,
+el diseño de una batería de pruebas unitarias automatizadas que registren
+métricas de rendimiento precisas (tiempo por nodo, tasa de expansión,
+memoria utilizada) para facilitar la comparación sistemática entre
+configuraciones, y el desarrollo de una interfaz gráfica que permita
+visualizar la evolución de la búsqueda y las soluciones encontradas.
+
+
+\begin{thebibliography}{00}
+
+\bibitem{beasley-peg-solitaire}
+J.~D. Beasley, \textit{The Ins and Outs of Peg Solitaire}. Oxford University
+Press, 1985.
+
+\bibitem{russell-norvig}
+S.~Russell y P.~Norvig, \textit{Inteligencia Artificial: Un Enfoque Moderno},
+3ª ed. Pearson, 2016.
+
+\bibitem{ghallab-automated-planning}
+M.~Ghallab, D.~Nau y P.~Traverso, \textit{Automated Planning: Theory and
+Practice}. Morgan Kaufmann, 2004.
+
+\bibitem{propuesta-senku}
+G.~Chaves Benítez, ``Planificación automática aplicada al Senku — Propuesta de
+trabajo'', Dpto. Ciencias de la Computación e Inteligencia Artificial,
+Universidad de Sevilla, curso 2025--2026.
+
+\bibitem{unified-planning}
+Unified Planning Team, ``Unified Planning: A Python Library for Planning
+Domain Definition Language''. [En línea]. Disponible:
+\url{https://unified-planning.readthedocs.io/}
+
+\bibitem{ai-plan-tareas}
+Google Gemini, ``Plan de Tareas — Senku-IA'', 2025. [En línea]. Disponible:
+\url{https://gemini.google.com/share/d61bfccb807f}
+
+\bibitem{ai-reglas}
+Google Gemini, ``Reglas del Senku — Modelado PDDL'', 2025. [En línea].
+Disponible: \url{https://gemini.google.com/share/7347390cccd4}
+
+\bibitem{ai-pddl-dominio}
+Google Gemini, ``PDDL del dominio Senku'', 2025. [En línea]. Disponible:
+\url{https://gemini.google.com/share/52a398704ec8}
+
+\bibitem{ai-pddl-claude}
+Anthropic Claude, ``PDDL del dominio Senku'', 2025. [En línea]. Disponible:
+\url{https://claude.ai/share/a36beb8c-2530-41d7-88a3-f2fae1a92ae8}
+
+\bibitem{ai-basic-search}
+Google Gemini, ``Basic Search — Senku-IA'', 2025. [En línea]. Disponible:
+\url{https://gemini.google.com/share/d47a275f6aae}
+
+\bibitem{ai-basic-search-opencode}
+OpenCode, ``Basic Search — Senku-IA'', 2025. [En línea]. Disponible:
+\url{https://opncd.ai/share/68vADM52}
+
+\bibitem{ai-memoria-opencode}
+OpenCode, ``Refactorización y memoria — Senku-IA'', 2026. [En línea]. Disponible:
+\url{https://opncd.ai/share/xLLRjijG}
+
+\bibitem{ai-chatgpt-latex}
+ChatGPT, ``Formato LaTeX — Senku-IA'', 2025. [En línea]. Disponible:
+\url{https://chatgpt.com/share/6a268255-36b8-83eb-bea8-2e82f68d0707}
+
+\bibitem{ai-chatgpt-pddl}
+ChatGPT, ``Precondiciones PDDL — Senku-IA'', 2025. [En línea]. Disponible:
+\url{https://chatgpt.com/share/6a26849b-e9c8-83eb-b55b-042ed558a81e}
+
+\end{thebibliography}
 
 
 \end{document}
