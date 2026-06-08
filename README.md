@@ -8,7 +8,6 @@ Proyecto sobre la planificacion automatica aplicada al Senku para la asignatura 
 .
 ├── docs/
 │   ├── memoria.tex          # Memoria del proyecto en LaTeX
-│   ├── memoria.pdf          # Memoria compilada
 │   ├── presentacion.pdf     # Presentacion del proyecto
 │   ├── Rules.md             # Normas y descripcion del Senku
 │   └── outputs.md           # Salidas de terminal de la bateria de pruebas
@@ -31,6 +30,8 @@ Proyecto sobre la planificacion automatica aplicada al Senku para la asignatura 
 ├── main.py                  # Punto de entrada unificado
 └── README.md                # Guia basica
 ```
+
+Presentación en Genially: https://view.genially.com/6a26eaff794c5b9cbbc92d60
 
 ## Ejecucion
 
